@@ -1,0 +1,56 @@
+# Ambiente virtual/conda dentro do projeto
+env/
+.env/
+venv/
+.venv/
+
+# Arquivos de cache do Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Arquivos temporários
+*.log
+*.pot
+*.tmp
+*.swp
+*.swo
+
+# Configurações locais
+*.env
+.envrc
+.vscode/
+.idea/
+
+# Jupyter Notebooks checkpoints
+.ipynb_checkpoints
+
+# Dados temporários
+# *.csv
+*.tsv
+*.parquet
+*.h5
+*.db
+*.sqlite3
+
+# Arquivos de build/distribuição
+build/
+dist/
+.eggs/
+*.egg-info/
+
+# Relatórios de profiling
+.prof
+.profile
+
+# Testes
+.coverage
+.pytest_cache/
+.tox/
+.mypy_cache/
+.dmypy.json
+.pyre/
+
+# Sistema operacional
+.DS_Store
+Thumbs.db
