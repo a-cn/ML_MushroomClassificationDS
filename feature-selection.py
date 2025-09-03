@@ -10,17 +10,17 @@ target_col = 'class'  # define o nome da coluna alvo (variável resposta) exatam
 s = setup(
     data=data,
     target=target_col,
-    low_variance_threshold=0.01,      # 0 = remove só constantes; use 0.01 para quase-constantes
+    low_variance_threshold=0.05,      # 0 = remove só constantes; use 0.01 para quase-constantes
     remove_multicollinearity=True,    # remove variáveis altamente correlacionadas
     multicollinearity_threshold=0.9,  # corte de correlação (0.9 é comum)
     feature_selection=True,           # "classic" por padrão no PyCaret 3
-    n_features_to_select=0.8,         # mantém ~80% das features (pode usar um inteiro também)
     session_id=1                      # reprodutibilidade (resultados idênticos, desde que todo o resto seja igual)
 )
 
 # 3) Compara modelos e guarda o leaderboard:
 best = compare_models()
 leaderboard = pull()  # ranking dos modelos
+print(compare_models())
 
 # 4) Importância de features do melhor modelo:
 plot_model(best, plot='feature')
