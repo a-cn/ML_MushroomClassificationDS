@@ -46,7 +46,7 @@ As dependências estão listadas em [`environment.yml`](./environment.yml). Entr
 ---
 
 ## 📈 Features Mais Relevantes
-![Feature Importance](./doc/resultados/Feature_Importance_Plot_wLine.png)  
+![Feature Importance](./doc/resultados/tentativa_02/Feature_Importance_Plot_wLine.png)  
 *Figura: gráfico de importância das variáveis mais relevantes para o modelo.*
 
 ---
@@ -134,7 +134,6 @@ As dependências estão listadas em [`environment.yml`](./environment.yml). Entr
 │   └── mushrooms.csv     # Dataset em CSV
 ├── notebooks/            # Contém os Jupyter Notebooks
 ├── data-profiling.py     # Código para análise exploratória de dados
-├── feature-selection.py  # Código para seleção de variáveis e comparação de modelos
 ├── environment.yml       # Arquivo de dependências
 └── README.md
 ```
