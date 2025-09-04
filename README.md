@@ -37,8 +37,8 @@ As dependências estão listadas em [`environment.yml`](./environment.yml). Entr
    - Avaliação de multicolinearidade e seleção automática das variáveis mais relevantes via PyCaret.  
 
 3. **Treinamento e Comparação de Modelos**:  
-   - Vários algoritmos de classificação foram avaliados (árvores de decisão, ensembles, regressão logística, etc.);  
-   - O melhor modelo foi identificado com base na métrica de **acurácia**.  
+   - Vários algoritmos de classificação foram avaliados (árvores de decisão, random forest, regressão logística, entre outros);  
+   - O melhor modelo foi identificado com base na métrica **AUC (Área sob a curva ROC)**, priorizando a capacidade do modelo de separar com precisão cogumelos venenosos de comestíveis em diferentes limiares, visando a evitar falsos negativos (erros de classificação).  
 
 4. **Visualização**:  
    - Geração de gráficos de importância das variáveis após o treinamento dos modelos.  
@@ -132,6 +132,7 @@ As dependências estão listadas em [`environment.yml`](./environment.yml). Entr
 ├── doc/
 │   ├── resultados/       # Contém os resultados de execuções
 │   └── mushrooms.csv     # Dataset em CSV
+├── notebooks/            # Contém os Jupyter Notebooks
 ├── data-profiling.py     # Código para análise exploratória de dados
 ├── feature-selection.py  # Código para seleção de variáveis e comparação de modelos
 ├── environment.yml       # Arquivo de dependências
