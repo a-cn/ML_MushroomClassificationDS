@@ -18,3 +18,7 @@ dependencies:
       - lightgbm==4.3.0
       - xgboost==2.0.3
       - catboost==1.2.5
+      - streamlit
+      - streamlit-ydata-profiling
+      - clickhouse-connect==0.8.18
+      - python-dotenv==1.1.1

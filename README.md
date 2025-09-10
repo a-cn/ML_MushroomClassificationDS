@@ -129,9 +129,11 @@ As dependências estão listadas em [`environment.yml`](./environment.yml). Entr
 
 ## 📂 Estrutura do Repositório
 ```plaintext
+├── app/                  # Contém o aplicativo Streamlit
 ├── doc/
 │   ├── resultados/       # Contém os resultados de execuções
 │   └── mushrooms.csv     # Dataset em CSV
+├── models/               # Contém os modelos treinados
 ├── notebooks/            # Contém os Jupyter Notebooks
 ├── data-profiling.py     # Código para análise exploratória de dados
 ├── environment.yml       # Arquivo de dependências
