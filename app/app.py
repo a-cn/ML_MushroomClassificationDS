@@ -132,7 +132,7 @@ def _export_html_report(
                 b64img = base64.b64encode(f.read()).decode()
             images_html.append(f"<h3>{label}</h3><img src='data:image/png;base64,{b64img}' style='max-width:100%;'/>")
         else:
-            images_html.append(f"<h3>{label}</h3><p><em>Imagem não gerada.</em></p>")
+            images_html.append(f"<h3>{label}</h3><p><em>Plot exibido apenas na interface (não salvo como arquivo).</em></p>")
 
     html_doc = f"""
 <!DOCTYPE html>
@@ -193,10 +193,13 @@ fonte = st.sidebar.radio(
 )
 local_path = st.sidebar.text_input("Caminho local (ENV MUSHROOM_LOCAL ou outro)", value=default_local)
 
+# Coluna alvo (target) - estática
+st.sidebar.text_input("Coluna alvo (target)", value="class", disabled=True)
+
 st.sidebar.markdown("---")
-acc_goal = st.sidebar.slider("🎯 Alvo de Precisão (threshold)", 0.5, 1.0, 0.95, 0.01,
+acc_goal = st.sidebar.slider("🎯 Alvo de Precisão (threshold)", 0.5, 1.0, 0.8, 0.01,
                              help="Meta desejada de *Accuracy* para destacar se o modelo atingiu a precisão mínima.")
-folds = st.sidebar.number_input("🔁 K-Folds (cross-validation)", min_value=3, max_value=20, value=5, step=1)
+folds = st.sidebar.number_input("🔁 K-Folds (cross-validation)", min_value=3, max_value=20, value=10, step=1)
 
 st.sidebar.markdown("---")
 st.sidebar.caption("💡 Dica: ajuste os Folds para controle de variância; use o Alvo de Precisão para checar se o melhor modelo atingiu sua meta.")
@@ -226,8 +229,6 @@ tabs = st.tabs([
 # Estados em sessão
 if "data" not in st.session_state:
     st.session_state.data = None
-if "target_col" not in st.session_state:
-    st.session_state.target_col = "class"  # padrão do seu projeto de cogumelos
 if "best_model" not in st.session_state:
     st.session_state.best_model = None
 if "leaderboard" not in st.session_state:
@@ -240,6 +241,14 @@ if "feature_cols" not in st.session_state:
     st.session_state.feature_cols = []
 if "plots" not in st.session_state:
     st.session_state.plots = {}  # label -> path
+if "training_completed" not in st.session_state:
+    st.session_state.training_completed = False
+if "setup_info" not in st.session_state:
+    st.session_state.setup_info = None
+if "model_info" not in st.session_state:
+    st.session_state.model_info = None
+if "accuracy_goal_met" not in st.session_state:
+    st.session_state.accuracy_goal_met = None
 
 # =========================================================
 # TAB 1 – Treino & Métricas
@@ -249,11 +258,8 @@ with tabs[0]:
     st.subheader("Treino & Métricas")
     st.markdown("Clique para **carregar** o dataset, **treinar** e **visualizar** os resultados principais (Leaderboard e plots).")
 
-    col_btn, col_target = st.columns([1, 1])
-    with col_target:
-        st.session_state.target_col = st.text_input("Coluna alvo (target)", value="class")
-
-    if col_btn.button("🚀 Carregar, Treinar e Visualizar", use_container_width=True):
+    # Botão para executar o treinamento
+    if st.button("🚀 Carregar, Treinar e Visualizar", use_container_width=True):
         # Carregar dados
         if fonte.startswith("Local"):
             df = load_dataframe("local", local_path)
@@ -266,10 +272,11 @@ with tabs[0]:
         st.session_state.data = df.copy()
 
         # Features
-        if st.session_state.target_col in df.columns:
-            st.session_state.feature_cols = [c for c in df.columns if c != st.session_state.target_col]
+        target_col = "class"  # Target fixo
+        if target_col in df.columns:
+            st.session_state.feature_cols = [c for c in df.columns if c != target_col]
         else:
-            st.warning(f"Target '{st.session_state.target_col}' não encontrado no dataset. Verifique o nome da coluna.")
+            st.warning(f"Target '{target_col}' não encontrado no dataset. Verifique o nome da coluna.")
             st.stop()
 
         # === SETUP EXATAMENTE COMO NO SEU NOTEBOOK ===
@@ -289,6 +296,12 @@ with tabs[0]:
         with st.spinner("Executando setup() com seus parâmetros..."):
             s = setup(**setup_params)
 
+        # Captura e exibe a tabela resultante do setup
+        setup_info = pull()
+        st.session_state.setup_info = setup_info
+        st.markdown("#### 📋 Informações do Setup")
+        st.dataframe(setup_info, use_container_width=True)
+        
         st.success("Setup concluído ✅")
 
         # Leaderboard por AUC (compare_models) — TABELA
@@ -297,9 +310,22 @@ with tabs[0]:
             leaderboard = pull()                  # captura a tabela
         st.session_state.leaderboard = leaderboard
 
-        st.markdown("### Leaderboard (compare_models | sort='AUC')")
-        st.dataframe(leaderboard, use_container_width=True)
+        # === SEU MODELO PRINCIPAL: DECISION TREE ===
+        with st.spinner("Criando modelo Decision Tree (dt)..."):
+            dt_model = create_model("dt")  # seu classificador principal
+        
+        # Captura e exibe a tabela resultante do create_model
+        model_info = pull()
+        st.session_state.model_info = model_info
+        st.markdown("#### 🌳 Informações do Modelo Decision Tree")
+        st.dataframe(model_info, use_container_width=True)
+        
+        st.session_state.best_model = dt_model
 
+        # Marca que o treinamento foi concluído
+        st.session_state.training_completed = True
+        st.success("Treino concluído ✅")
+        
         # Checagem de meta de precisão (se houver coluna de Accuracy)
         acc_col = None
         for candidate in ["Accuracy", "Accuracy "]:
@@ -309,51 +335,91 @@ with tabs[0]:
         if acc_col is not None:
             top_acc = leaderboard.iloc[0][acc_col]
             if pd.notnull(top_acc) and float(top_acc) >= acc_goal:
+                st.session_state.accuracy_goal_met = True
                 st.success(f"🎉 Meta de precisão atingida! {float(top_acc):.4f} ≥ {acc_goal:.4f}")
             else:
+                st.session_state.accuracy_goal_met = False
                 st.warning(f"Meta de precisão **não** atingida. Top Accuracy: {float(top_acc):.4f} < {acc_goal:.4f}")
         else:
+            st.session_state.accuracy_goal_met = None
             st.info("Coluna de Accuracy não localizada no leaderboard.")
 
-        # === SEU MODELO PRINCIPAL: DECISION TREE ===
-        with st.spinner("Criando modelo Decision Tree (dt)..."):
-            dt_model = create_model("dt")  # seu classificador principal
-        st.session_state.best_model = dt_model
+    # Exibir resultados se o treinamento foi concluído
+    if st.session_state.training_completed and st.session_state.leaderboard is not None:
+        st.markdown("---")
+        st.markdown("### 📊 Resultados do Treinamento")
+        
+        # Informações do Setup
+        if st.session_state.setup_info is not None:
+            st.markdown("#### 📋 Informações do Setup")
+            st.dataframe(st.session_state.setup_info, use_container_width=True)
+            st.markdown("---")
+        
+        # Leaderboard
+        st.markdown("#### Leaderboard (compare_models | sort='AUC')")
+        st.dataframe(st.session_state.leaderboard, use_container_width=True)
+        st.markdown("---")
+        
+        # Informações do Modelo
+        if st.session_state.model_info is not None:
+            st.markdown("#### 🌳 Informações do Modelo Decision Tree")
+            st.dataframe(st.session_state.model_info, use_container_width=True)
+            st.markdown("---")
+        
+        # Meta de Precisão
+        if st.session_state.accuracy_goal_met is not None:
+            if st.session_state.accuracy_goal_met:
+                st.success("🎉 Meta de precisão foi atingida!")
+            else:
+                st.warning("⚠️ Meta de precisão não foi atingida.")
+            st.markdown("---")
 
-        # === PLOTS: pipeline, AUC, matriz, threshold, importância e árvore ===
-        st.markdown("### Gráficos do Modelo (Decision Tree)")
-        plots_requested = [
-            ("Pipeline", "pipeline"),
-            ("AUC", "auc"),
-            ("Matriz de Confusão", "confusion_matrix"),
-            ("Threshold", "threshold"),
-            ("Importância de Features", "feature"),
-        ]
+        # Plots do modelo
+        if st.session_state.best_model is not None:
+            st.markdown("#### Gráficos do Modelo (Decision Tree)")
+            plots_requested = [
+                ("Pipeline", "pipeline"),
+                ("AUC", "auc"),
+                ("Matriz de Confusão", "confusion_matrix"),
+                ("Threshold", "threshold"),
+                ("Importância de Features", "feature"),
+            ]
 
-        cols = st.columns(2)
-        idx = 0
-        for label, plt_name in plots_requested:
+            cols = st.columns(2)
+            idx = 0
+            for label, plt_name in plots_requested:
+                try:
+                    # Exibe o plot diretamente no Streamlit sem salvar arquivo
+                    with cols[idx % 2]:
+                        # Gera o plot do PyCaret e exibe diretamente
+                        plot_model(st.session_state.best_model, plot=plt_name, display_format='streamlit')
+                    # Marca como plot gerado mas não salvo
+                    st.session_state.plots[label] = None
+                    idx += 1
+                except Exception as e:
+                    st.info(f"Plot '{label}' não pôde ser gerado automaticamente ({e}).")
+
+            # Árvore de Decisão (visual)
             try:
-                plot_model(st.session_state.best_model, plot=plt_name, save=True)
-                saved = _save_current_plot(plt_name)
-                st.session_state.plots[label] = saved
+                # Exibe o plot diretamente no Streamlit sem salvar arquivo
                 with cols[idx % 2]:
-                    _show_plot_image(saved, caption=f"{label} ({plt_name})")
-                idx += 1
+                    # Gera o plot do PyCaret e exibe diretamente
+                    plot_model(st.session_state.best_model, plot="tree", display_format='streamlit')
+                # Marca como plot gerado mas não salvo
+                st.session_state.plots["Decision Tree (DT)"] = None
             except Exception as e:
-                st.info(f"Plot '{label}' não pôde ser gerado automaticamente ({e}).")
+                st.info(f"Plot 'Decision Tree' não pôde ser gerado ({e}).")
 
-        # Árvore de Decisão (visual)
-        try:
-            plot_model(st.session_state.best_model, plot="tree", save=True)
-            saved = _save_current_plot("decision_tree")
-            st.session_state.plots["Decision Tree (DT)"] = saved
-            with cols[idx % 2]:
-                _show_plot_image(saved, caption="Decision Tree (DT)")
-        except Exception as e:
-            st.info(f"Plot 'Decision Tree' não pôde ser gerado ({e}).")
-
-        st.success("Treino & visualização concluídos ✅")
+        # Botão para limpar resultados
+        if st.button("🗑️ Limpar Resultados", use_container_width=True):
+            st.session_state.training_completed = False
+            st.session_state.leaderboard = None
+            st.session_state.best_model = None
+            st.session_state.plots = {}
+            st.session_state.setup_info = None
+            st.session_state.model_info = None
+            st.session_state.accuracy_goal_met = None
+            st.rerun()
 
 # =========================================================
 # TAB 2 – Profiling
@@ -361,25 +427,39 @@ with tabs[0]:
 with tabs[1]:
     st.subheader("Profiling (ydata-profiling)")
     st.caption("Gera um relatório exploratório completo do dataset.")
+    
     if st.session_state.data is None:
         st.info("Carregue e treine na aba **Treino & Métricas** primeiro.")
     else:
-        gen = st.checkbox("Gerar/Atualizar profiling agora", value=False)
-        if gen:
+        # Botão para gerar/atualizar profiling
+        if st.button("📊 Gerar/Atualizar Profiling", use_container_width=True):
             with st.spinner("Gerando ydata-profiling..."):
                 prof = ProfileReport(st.session_state.data, title="Data Profiling", minimal=False)
                 report_html = prof.to_html()
                 st.session_state.profiling_html = report_html
             st.success("Profiling gerado ✅")
-
+            st.rerun()
+        
+        # Status informativo abaixo do botão
         if st.session_state.profiling_html:
+            st.success("✅ Profiling disponível para visualização e download")
+        else:
+            st.info("ℹ️ Clique no botão para gerar o profiling")
+
+        # Exibir profiling se disponível
+        if st.session_state.profiling_html:
+            st.markdown("---")
+            st.markdown("### 📈 Relatório de Profiling")
             st_html(st.session_state.profiling_html, height=800, scrolling=True)
+            
             # Botão de download (HTML)
-            btn = st.download_button(
+            st.markdown("---")
+            st.download_button(
                 "⬇️ Baixar Profiling (HTML)",
                 data=st.session_state.profiling_html.encode("utf-8"),
                 file_name="profiling_report.html",
-                mime="text/html"
+                mime="text/html",
+                use_container_width=True
             )
 
 # =========================================================
@@ -489,7 +569,7 @@ with tabs[5]:
             lb = st.session_state.leaderboard if isinstance(st.session_state.leaderboard, pd.DataFrame) else None
             html_bytes = _export_html_report(
                 dataset_name=dataset_name,
-                target_col=st.session_state.target_col,
+                target_col="class",  # Target fixo
                 setup_params=st.session_state.setup_params,
                 leaderboard_df=lb,
                 plot_paths=st.session_state.plots,
