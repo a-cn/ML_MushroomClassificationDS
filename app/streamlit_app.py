@@ -179,6 +179,31 @@ Teste o modelo com novos dados para verificar sua performance em cenários reais
 - **Análise de Confiança**: Identifica predições com alta/baixa confiança
 - **Detecção de Drift**: Compara distribuições entre treino e validação
 - **Validação Cruzada**: Testa robustez com diferentes amostras
+""",
+    "pipeline": """
+**Pipeline Plot**  
+Mostra o fluxo de processamento dos dados através do pipeline de machine learning.  
+- **Transformações**: Pré-processamento, normalização, encoding
+- **Seleção de Features**: Quais variáveis foram selecionadas
+- **Modelo**: Algoritmo de classificação utilizado
+- **Validação**: Como os dados foram divididos para treino/teste
+""",
+    "error": """
+**Prediction Error**  
+Análise dos erros de predição do modelo.  
+- **Resíduos**: Diferença entre valores reais e preditos
+- **Distribuição dos Erros**: Padrões nos erros de classificação
+- **Outliers**: Predições com maior erro
+- **Bias-Variance**: Identifica se o modelo tem viés ou variância alta
+""",
+    "tree": """
+**Decision Tree**  
+Visualização da árvore de decisão do modelo.  
+- **Nós**: Pontos de decisão baseados em features
+- **Ramos**: Condições que levam a diferentes classificações
+- **Folhas**: Classes finais (comestível/venenoso)
+- **Profundidade**: Complexidade da árvore
+- **Importância**: Quais features são mais decisivas
 """
 }
 
@@ -617,20 +642,19 @@ uploaded_model = st.sidebar.file_uploader(
 model_basename = None
 
 # Abas
-tab_eda, tab_training, tab_evaluate, tab_eval, tab_interpret, tab_validate, tab_predict, tab_explain, tab_export = st.tabs([
+tab_explain, tab_eda, tab_training, tab_evaluate, tab_interpret, tab_validate, tab_predict, tab_export = st.tabs([
+    "Orientações",
     "EDA (ydata-profiling)",
     "Treino & Métricas",
     "Evaluate Model",
-    "Avaliação Completa",
     "Interpretação (SHAP)",
     "Validação (Dados Sem Rótulo)",
     "Predição Interativa",
-    "Entenda os Resultados",
     "Exportar Relatório"
 ])
 
 # =========================================
-# Aba 1 — EDA (ydata-profiling)
+# Aba 2 — EDA (ydata-profiling)
 # =========================================
 with tab_eda:
     st.subheader("Análise Exploratória de Dados (ydata-profiling)")
@@ -643,7 +667,7 @@ with tab_eda:
             df = load_mushrooms_csv(path=data_path)
         st.write("Amostra do dataset:", df.head())
         
-        if st.button("📊 Gerar relatório (profiling)", use_container_width=False):
+        if st.button("🔍 Gerar relatório (profiling)", use_container_width=False):
             with st.spinner("Gerando relatório..."):
                 profile = ProfileReport(df, title="Mushrooms — Profiling", minimal=False)
                 html_str = profile.to_html()
@@ -667,7 +691,7 @@ with tab_eda:
         st.error(f"Falha no EDA: {e}")
 
 # =========================================
-# Aba 2 — Treino & Métricas
+# Aba 3 — Treino & Métricas
 # =========================================
 with tab_training:
     st.subheader("Treino & Métricas")
@@ -807,7 +831,7 @@ with tab_training:
             st.rerun()
 
 # =========================================
-# Aba 3 — Evaluate Model
+# Aba 4 — Evaluate Model
 # =========================================
 with tab_evaluate:
     st.subheader("Evaluate Model")
@@ -818,201 +842,108 @@ with tab_evaluate:
         model_source_type = "treinado na sessão"
         st.info(f"ℹ️ Usando o modelo {model_source_type}")
         
-        # Plots do modelo usando evaluate_model
-        st.markdown("### 📊 Gráficos de Avaliação do Modelo")
+        # Exibir métricas principais do leaderboard
+        if st.session_state.training_leaderboard is not None:
+            st.markdown("### 📊 Métricas Principais do Modelo")
+            
+            # Obter métricas do primeiro modelo (melhor) do leaderboard
+            leaderboard = st.session_state.training_leaderboard
+            if len(leaderboard) > 0:
+                # Buscar colunas de métricas disponíveis
+                available_metrics = {}
+                
+                # Mapear nomes de colunas possíveis para métricas
+                metric_mapping = {
+                    'Accuracy': 'Acurácia',
+                    'Accuracy ': 'Acurácia',
+                    'Precision': 'Precisão', 
+                    'Precision ': 'Precisão',
+                    'Recall': 'Recall',
+                    'Recall ': 'Recall',
+                    'F1': 'F1-Score',
+                    'F1 ': 'F1-Score',
+                    'AUC': 'AUC-ROC',
+                    'AUC ': 'AUC-ROC',
+                    'AP': 'AP (PR-AUC)',
+                    'AP ': 'AP (PR-AUC)'
+                }
+                
+                # Encontrar métricas disponíveis no leaderboard
+                for col in leaderboard.columns:
+                    if col in metric_mapping:
+                        value = leaderboard.iloc[0][col]
+                        if pd.notnull(value):
+                            available_metrics[metric_mapping[col]] = float(value)
+                
+                # Exibir métricas em cartões
+                if available_metrics:
+                    # Organizar em 4 colunas para as métricas principais
+                    metric_keys = list(available_metrics.keys())
+                    cols = st.columns(4)
+                    
+                    for i, (metric_name, value) in enumerate(available_metrics.items()):
+                        if i < 4:  # Primeiras 4 métricas em 4 colunas
+                            with cols[i]:
+                                st.metric(metric_name, f"{value:.4f}")
+                    
+                    # Métricas adicionais em 2 colunas se houver mais de 4
+                    if len(available_metrics) > 4:
+                        additional_cols = st.columns(2)
+                        for i, (metric_name, value) in enumerate(available_metrics.items()):
+                            if i >= 4:  # Métricas adicionais
+                                col_idx = (i - 4) % 2
+                                with additional_cols[col_idx]:
+                                    st.metric(metric_name, f"{value:.4f}")
+                else:
+                    st.info("Métricas não disponíveis no leaderboard")
+            else:
+                st.info("Leaderboard vazio")
+            
+            st.markdown("---")
         
-        # Lista completa de plots disponíveis
+        # Plots do modelo usando evaluate_model
+        st.markdown("### 📈 Avaliação do Modelo (evaluate_model)")
+        
+        # Lista completa de plots disponíveis com suas explicações
         plots_requested = [
-            ("Pipeline Plot", "pipeline"),
-            ("AUC", "auc"),
-            ("Confusion Matrix", "confusion_matrix"),
-            ("Threshold", "threshold"),
-            ("Precision Recall", "pr"),
-            ("Prediction Error", "error"),
-            ("Class Report", "class_report"),
-            ("Feature Selection", "feature"),
-            ("Feature Importance", "feature"),
-            ("Learning Curve", "learning"),
-            ("Manifold Learning", "manifold"),
-            ("Calibration Curve", "calibration"),
-            ("Validation Curve", "vc"),
-            ("Decision Tree", "tree"),
+            ("Pipeline Plot", "pipeline", "pipeline"),
+            ("AUC", "auc", "auc_roc"),
+            ("Confusion Matrix", "confusion_matrix", "cm"),
+            ("Threshold", "threshold", "threshold"),
+            ("Precision Recall", "pr", "ap_pr"),
+            ("Prediction Error", "error", "error"),
+            ("Class Report", "class_report", "clf_report"),
+            ("Feature Importance", "feature", "feat_importance"),
+            ("Learning Curve", "learning", "learning_curve"),
+            ("Manifold Learning", "manifold", "manifold"),
+            ("Calibration Curve", "calibration", "calibration"),
+            ("Validation Curve", "vc", "validation"),
+            ("Decision Tree", "tree", "tree"),
         ]
 
-        # Organizar em 2 colunas
-        cols = st.columns(2)
-        idx = 0
-        
-        for label, plt_name in plots_requested:
+        # Exibir plots em uma única coluna
+        for label, plt_name, explanation_key in plots_requested:
             try:
-                # Exibe o plot diretamente no Streamlit sem salvar arquivo
-                with cols[idx % 2]:
-                    st.markdown(f"#### {label}")
-                    # Gera o plot do PyCaret e exibe diretamente
-                    plot_model(st.session_state.trained_model, plot=plt_name, display_format='streamlit')
+                st.markdown(f"#### {label}")
+                # Gera o plot do PyCaret e exibe diretamente
+                plot_model(st.session_state.trained_model, plot=plt_name, display_format='streamlit')
+                
+                # Adicionar explicação colapsada para cada plot
+                with st.expander(f"ℹ️ Como interpretar — {label}"):
+                    st.markdown(EXPLANATIONS_MD.get(explanation_key, "_(Explicação não disponível para este gráfico)_"))
+                
                 # Marca como plot gerado mas não salvo
                 st.session_state.training_plots[label] = None
-                idx += 1
+                
             except Exception as e:
                 st.warning(f"Plot '{label}' não pôde ser gerado: {e}")
-                # Ainda incrementa o índice para manter o layout
-                idx += 1
             
     else:
         st.warning("⚠️ Nenhum modelo treinado disponível!")
         st.info("💡 Treine um modelo na aba 'Treino & Métricas' primeiro.")
 
 # =========================================
-# Aba 4 — Avaliação Completa
-# =========================================
-with tab_eval:
-    st.subheader("Avaliação Completa do Modelo")
-    
-    # Verificar se há modelo disponível (treinado ou pré-treinado)
-    model_to_use, model_source_type = get_available_model()
-    
-    if model_to_use is None:
-        st.error("❌ Nenhum modelo disponível!")
-        st.info("💡 Treine um modelo na aba 'Treino & Métricas' ou carregue um modelo (.pkl) na sidebar.")
-    else:
-        st.info(f"ℹ️ Usando o modelo {model_source_type}")
-        try:
-            # Carregar dados
-            if fonte == "Upload (CSV)" and uploaded_file is not None:
-                df = load_mushrooms_csv(uploaded_file=uploaded_file)
-            else:
-                data_path = Path(local_path) if local_path else DATASET_PATH
-                df = load_mushrooms_csv(path=data_path)
-            if target_col not in df.columns:
-                st.error(f"A coluna alvo '{target_col}' não existe no CSV.")
-            else:
-                # Setup mínimo apenas para obter configurações necessárias
-                _ = setup(
-                    data=df,
-                    target=target_col,
-                    session_id=1,
-                    feature_selection=True,
-                    feature_selection_method="classic",
-                    remove_multicollinearity=True,
-                    multicollinearity_threshold=0.9,
-                    low_variance_threshold=0.05,
-                    verbose=False
-                )
-                
-                # Carregar modelo baseado na fonte
-                if model_source_type == "treinado na sessão":
-                    model = model_to_use
-                else:  # via upload
-                    model = model_to_use
-
-                st.success(f"Modelo {model_source_type} carregado com sucesso!")
-
-                # Obter predições para análise avançada
-                predictions = predict_model(model, data=df)
-                y_true = df[target_col]
-                y_pred = predictions['prediction_label']
-                y_proba = predictions['prediction_score']
-            
-                # Converter labels para valores numéricos para as métricas
-                le = LabelEncoder()
-                y_true_numeric = le.fit_transform(y_true)
-                y_pred_numeric = le.transform(y_pred)
-                
-                # Métricas principais
-                st.markdown("### 📊 Métricas Principais")
-                col1, col2, col3, col4 = st.columns(4)
-                
-                accuracy = accuracy_score(y_true_numeric, y_pred_numeric)
-                precision = precision_score(y_true_numeric, y_pred_numeric, average='weighted')
-                recall = recall_score(y_true_numeric, y_pred_numeric, average='weighted')
-                f1 = f1_score(y_true_numeric, y_pred_numeric, average='weighted')
-                auc_roc = roc_auc_score(y_true_numeric, y_proba)
-                ap = average_precision_score(y_true_numeric, y_proba)
-                
-                col1.metric("Acurácia", f"{accuracy:.4f}")
-                col2.metric("Precisão", f"{precision:.4f}")
-                col3.metric("Recall", f"{recall:.4f}")
-                col4.metric("F1-Score", f"{f1:.4f}")
-                
-                col5, col6 = st.columns(2)
-                col5.metric("AUC-ROC", f"{auc_roc:.4f}")
-                col6.metric("AP (PR-AUC)", f"{ap:.4f}")
-
-                # Gráficos avançados
-                st.markdown("### 📈 Visualizações Avançadas")
-                
-                # ROC Curve
-                st.markdown("#### Curva ROC")
-                fig_roc = plot_roc_curve_advanced(y_true_numeric, y_proba)
-                st.plotly_chart(fig_roc, use_container_width=True)
-                render_expander_md("Curva ROC e AUC-ROC", "auc_roc")
-            
-                # Precision-Recall Curve
-                st.markdown("#### Curva Precision-Recall")
-                fig_pr = plot_pr_curve_advanced(y_true_numeric, y_proba)
-                st.plotly_chart(fig_pr, use_container_width=True)
-                render_expander_md("Curva Precision-Recall", "ap_pr")
-                
-                # Matriz de Confusão
-                st.markdown("#### Matriz de Confusão")
-                class_names = sorted(y_true.unique())
-                fig_cm, cm = plot_confusion_matrix_advanced(y_true_numeric, y_pred_numeric, class_names)
-                st.plotly_chart(fig_cm, use_container_width=True)
-                render_expander_md("Matriz de Confusão", "cm")
-                
-                # Relatório de Classificação
-                st.markdown("#### Relatório de Classificação")
-                clf_report = classification_report(y_true_numeric, y_pred_numeric, target_names=class_names)
-                st.text(clf_report)
-                render_expander_md("Relatório de Classificação", "clf_report")
-                
-                # Importância de Features
-                st.markdown("#### Importância de Features")
-                try:
-                    if hasattr(model, 'feature_importances_'):
-                        feature_names = get_config("X_train_transformed").columns.tolist()
-                        importances = model.feature_importances_
-                        importance_dict = dict(zip(feature_names, importances))
-                        fig_imp = plot_feature_importance_advanced(importance_dict, top_n=20)
-                        st.plotly_chart(fig_imp, use_container_width=True)
-                    else:
-                        plot_model(model, plot="feature", display_format="streamlit")
-                except Exception as e:
-                    st.warning(f"Falha ao gerar gráfico de importância: {e}")
-                render_expander_md("Importância de Features", "feat_importance")
-                
-                # Curva de Calibração
-                st.markdown("#### Curva de Calibração")
-                try:
-                    fig_cal = plot_calibration_curve_advanced(y_true_numeric, y_proba)
-                    st.plotly_chart(fig_cal, use_container_width=True)
-                except Exception as e:
-                    st.warning(f"Falha ao gerar curva de calibração: {e}")
-                render_expander_md("Calibração", "calibration")
-                
-                # Gráficos do PyCaret
-                st.markdown("### 📊 Gráficos Adicionais (PyCaret)")
-                additional_plots = [
-                    ("Curva de Aprendizado", "learning"),
-                    ("Dimensionalidade (PCA/t-SNE)", "manifold"),
-                ]
-
-                for title, kind in additional_plots:
-                    st.markdown(f"#### {title}")
-                    try:
-                        plot_model(model, plot=kind, display_format="streamlit")
-                    except Exception as e:
-                        st.warning(f"Falha ao plotar {title}: {e}")
-                
-                render_expander_md("Curva de Aprendizado", "learning_curve")
-                render_expander_md("Redução de Dimensionalidade", "manifold")
-                
-
-        except Exception as e:
-            st.error(f"Falha na avaliação: {e}")
-
-# =========================================
-# Aba 3 — Interpretação do Modelo (SHAP)
+# Aba 5 — Interpretação do Modelo (SHAP)
 # =========================================
 with tab_interpret:
     st.subheader("Interpretação do Modelo (SHAP)")
@@ -1071,7 +1002,7 @@ with tab_interpret:
                 le = LabelEncoder()
                 y_sample_numeric = le.fit_transform(y_sample)
                 
-                if st.button("🔍 Gerar Análise SHAP", use_container_width=True):
+                if st.button("🔍 Gerar Análise SHAP", use_container_width=False):
                     with st.spinner("Gerando análise SHAP (pode demorar alguns minutos)..."):
                         shap_global, shap_pos, shap_neg = generate_shap_analysis(model, X_sample, y_sample_numeric)
                     
@@ -1119,7 +1050,7 @@ with tab_interpret:
             st.error(f"Falha na interpretação: {e}")
 
 # =========================================
-# Aba 4 — Validação com Dados Sem Rótulo
+# Aba 6 — Validação com Dados Sem Rótulo
 # =========================================
 with tab_validate:
     st.subheader("Validação com Dados Sem Rótulo")
@@ -1168,10 +1099,10 @@ with tab_validate:
                         st.error(f"❌ Colunas obrigatórias ausentes: {missing_cols}")
                     else:
                         # Mostrar prévia dos dados
-                        st.markdown("### 👀 Prévia dos Dados")
+                        st.markdown("### Prévia dos Dados")
                         st.dataframe(df_validate.head(10), use_container_width=True)
                         
-                        if st.button("🔮 Executar Validação", use_container_width=True):
+                        if st.button("Executar Validação", use_container_width=False):
                             with st.spinner("Executando predições..."):
                                 # Executar predições
                                 predictions = predict_model(model, data=df_validate)
@@ -1219,7 +1150,7 @@ with tab_validate:
                                     data=csv_data,
                                     file_name="validacao_cogumelos.csv",
                                     mime="text/csv",
-                                    use_container_width=True
+                                    use_container_width=False
                                 )
                                 
                 except Exception as e:
@@ -1229,7 +1160,7 @@ with tab_validate:
             st.error(f"Falha na validação: {e}")
 
 # =========================================
-# Aba 5 — Predição Interativa
+# Aba 7 — Predição Interativa
 # =========================================
 with tab_predict:
     st.subheader("Predição Interativa")
@@ -1286,7 +1217,7 @@ with tab_predict:
             else:
                 st.success("✅ Todos os campos preenchidos corretamente")
 
-            if st.button("🔮 Prever (amostra única)", use_container_width=True, disabled=len(validation_errors) > 0):
+            if st.button("🔮 Prever (amostra única)", use_container_width=False, disabled=len(validation_errors) > 0):
                 try:
                     df_one = pd.DataFrame([values])
                     
@@ -1448,7 +1379,7 @@ with tab_predict:
                 try:
                     df_in = pd.read_csv(file)
                     st.write("Prévia:", df_in.head())
-                    if st.button("🔮 Prever lote", use_container_width=True):
+                    if st.button("🔮 Prever lote", use_container_width=False):
                         preds = predict_model(model, data=df_in.copy())
                         preds = preds.rename(columns={
                             "prediction_label": "pred_label",
@@ -1461,7 +1392,7 @@ with tab_predict:
                             data=preds.to_csv(index=False).encode("utf-8"),
                             file_name="predicoes_mushrooms.csv",
                             mime="text/csv",
-                            use_container_width=True
+                            use_container_width=False
                         )
                 except Exception as e:
                     st.error(f"Falha ao processar CSV: {e}")
@@ -1470,10 +1401,10 @@ with tab_predict:
             st.error(f"Falha na predição: {e}")
 
 # =========================================
-# Aba 6 — Entenda os Resultados
+# Aba 1 — Orientações
 # =========================================
 with tab_explain:
-    st.subheader("Entenda os Resultados")
+    st.subheader("Orientações")
     
     # Aviso de segurança principal
     st.error("⚠️ **AVISO IMPORTANTE DE SEGURANÇA**")
@@ -1482,22 +1413,13 @@ with tab_explain:
     
     **NUNCA use este modelo para determinar se um cogumelo é comestível na vida real!**
     
-    - ❌ **Erro na classificação de cogumelos venenosos pode ser FATAL**
-    - ✅ **SEMPRE consulte especialistas (micologistas) para identificação segura**
-    - ✅ **Use apenas para aprendizado de Machine Learning e análise de dados**
+    - ❌ **Erro na classificação de cogumelos venenosos pode ser FATAL**;
+    - ✅ **SEMPRE consulte especialistas (micologistas) para identificação segura**;
+    - ✅ **Use apenas para aprendizado de Machine Learning e análise de dados**.
     """)
-    
-    render_expander_md("Curva ROC e AUC-ROC", "auc_roc")
-    render_expander_md("Curva Precision-Recall", "ap_pr")
-    render_expander_md("Matriz de Confusão", "cm")
-    render_expander_md("Importância de Features", "feat_importance")
-    render_expander_md("Calibração", "calibration")
-    render_expander_md("Curva de Aprendizado", "learning_curve")
-    render_expander_md("Redução de Dimensionalidade", "manifold")
-    render_expander_md("Análise Exploratória de Dados", "eda")
 
 # =========================================
-# Aba 7 — Exportação HTML Completa
+# Aba 8 — Exportação HTML Completa
 # =========================================
 def export_everything_html(
     path_html="doc/resultados/relatorio_completo_cogumelos.html",
@@ -1597,7 +1519,7 @@ with tab_export:
         st.info("💡 Treine um modelo na aba 'Treino & Métricas' ou carregue um modelo (.pkl) na sidebar.")
     else:
         st.info(f"ℹ️ Usando o modelo {model_source_type}")
-        if st.button("📦 Gerar Relatório HTML Completo", use_container_width=True):
+        if st.button("📦 Gerar Relatório HTML Completo", use_container_width=False):
             try:
                 # Carregar dados e modelo para exportação
                 # Carregar dados
@@ -1682,7 +1604,7 @@ with tab_export:
                         data=f.read(),
                         file_name="relatorio_completo_cogumelos.html",
                         mime="text/html",
-                        use_container_width=True
+                        use_container_width=False
                     )
                 
                 # Mostrar prévia do relatório
@@ -1702,7 +1624,6 @@ st.markdown("---")
 st.markdown("""
 <div style='text-align: center; color: #666; padding: 20px;'>
     <p>🍄 <strong>Classificação de Cogumelos</strong> — Treinamento + Upload + XAI + Análise Completa</p>
-    <p><strong>⚠️ AVISO:</strong> NUNCA use este modelo para determinar se um cogumelo é comestível na vida real!</p>
     <p><em>Desenvolvido para fins educacionais e de demonstração</em></p>
 </div>
 """, unsafe_allow_html=True)
