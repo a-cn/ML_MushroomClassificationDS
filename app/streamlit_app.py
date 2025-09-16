@@ -134,8 +134,22 @@ O **F1** é a média harmônica entre *precision* e *recall*: F1 = 2 × (precisi
 """,
     "feat_importance": """
 **Importância de Variáveis**  
-Mostra quanto cada *feature* contribui para a decisão do modelo (ordem decrescente).  
-**Atenção**: importâncias não são causais; variáveis correlacionadas podem dividir relevância.
+Mede relevância de cada *feature* para o modelo, mas o significado varia conforme o método utilizado.
+""",
+    "feat_importance_model": """
+**Importância de Features (Treinamento do Modelo)**  
+Reflete a importância calculada durante o treinamento do estimador (ex.: ganho de impureza em árvores).  
+- Árvores/Florestas: soma do ganho de impureza (Gini/Entropia) ao usar a feature nos splits.  
+- Interpretação: valores maiores indicam que a feature ajudou mais a separar as classes ao treinar.  
+- Cuidados: pode favorecer variáveis com mais níveis; correlações podem “dividir” importância entre variáveis similares.
+""",
+    "feat_importance_shap": """
+**Importância de Features por SHAP**  
+Baseada na média do valor absoluto dos efeitos SHAP por feature (impacto médio no log-odds/probabilidade).  
+- Quanto maior, maior o efeito médio da feature nas predições (independe de sinal).  
+- Direção (aumentar/diminuir probabilidade) é vista nos gráficos SHAP detalhados; aqui o foco é a força média.  
+- Vantagens: consistente entre modelos; lida melhor com correlações do que importâncias por impureza.  
+- Use em conjunto com os plots SHAP globais/locais para entender sinais e faixas de valores.
 """,
     "learning_curve": """
 **Curva de Aprendizado**  
@@ -169,8 +183,22 @@ Dá visão de direção e força média do efeito de cada variável.
 """,
     "shap_local": """
 **SHAP — Local (barra por amostra)**  
-Mostra as *features* que mais empurraram **esta** previsão para cima (veneno) ou para baixo (comestível).  
+Mostra as *features* que mais empurraram **esta** previsão para cima (venenoso) ou para baixo (comestível).  
 Útil para justificar predições específicas e entender o "porquê" de cada classificação.
+""",
+    "shap_local_pos": """
+**SHAP — Classe Positiva (Venenoso)**  
+Este sumário foca amostras previstas/rotuladas como **venenosas**.  
+- **Eixo X**: impacto SHAP médio (absoluto) por feature; quanto mais à direita, maior a influência para a classe venenosa.  
+- **Cores**: valores altos da feature (vermelho) vs baixos (azul) e como empurram a predição para **venenoso**.  
+- **Leitura**: barras mais extensas e vermelhas à direita indicam que valores altos dessa feature aumentam a probabilidade de ser venenoso.
+""",
+    "shap_local_neg": """
+**SHAP — Classe Negativa (Comestível)**  
+Este sumário foca amostras previstas/rotuladas como **comestíveis**.  
+- **Eixo X**: impacto SHAP médio (absoluto) por feature; mais à esquerda/direita indica força da influência, aqui direcionada à classe comestível.  
+- **Cores**: valores altos (vermelho) e baixos (azul) e sua relação em puxar a predição para **comestível**.  
+- **Leitura**: barras proeminentes onde tons azuis dominam à direita sugerem que valores baixos daquela feature favorecem a classe comestível.
 """,
     "validation": """
 **Validação com Dados Sem Rótulo**  
@@ -328,7 +356,7 @@ def plot_feature_importance_advanced(importance_dict, top_n=20):
     ))
     
     fig.update_layout(
-        title=f"Top-{top_n} Features Mais Importantes",
+        title="Top Features Mais Importantes",
         xaxis_title="Importância",
         yaxis_title="Feature",
         height=max(400, len(features) * 25)
@@ -404,22 +432,29 @@ def generate_shap_analysis(model, X_sample, y_sample=None):
         shap_pos_img = None
         shap_neg_img = None
         if y_sample is not None:
-            idx_pos = y_sample[y_sample == 1].index if hasattr(y_sample, 'index') else np.where(y_sample == 1)[0]
-            idx_neg = y_sample[y_sample == 0].index if hasattr(y_sample, 'index') else np.where(y_sample == 0)[0]
+            y_array = np.array(y_sample)
+            idx_pos = np.where(y_array == 1)[0]
+            idx_neg = np.where(y_array == 0)[0]
             
             if len(idx_pos) > 0:
                 fig_pos = plt.figure(figsize=(10, 6))
-                shap.summary_plot(shap_values_pos[np.isin(X_sample.index, idx_pos) if hasattr(X_sample, 'index') else np.isin(range(len(X_sample)), idx_pos)], 
-                                X_sample.loc[idx_pos] if hasattr(X_sample, 'index') else X_sample.iloc[idx_pos], show=False)
-                plt.title("SHAP Summary Plot - Classe Positiva (Veneno)")
+                shap.summary_plot(
+                    shap_values_pos[idx_pos],
+                    X_sample.iloc[idx_pos],
+                    show=False
+                )
+                plt.title("SHAP Summary Plot - Classe Positiva (Venenoso)")
                 plt.tight_layout()
                 shap_pos_img = _mpl_fig_to_base64(fig_pos)
                 plt.close(fig_pos)
             
             if len(idx_neg) > 0:
                 fig_neg = plt.figure(figsize=(10, 6))
-                shap.summary_plot(shap_values_neg[np.isin(X_sample.index, idx_neg) if hasattr(X_sample, 'index') else np.isin(range(len(X_sample)), idx_neg)], 
-                                X_sample.loc[idx_neg] if hasattr(X_sample, 'index') else X_sample.iloc[idx_neg], show=False)
+                shap.summary_plot(
+                    shap_values_neg[idx_neg],
+                    X_sample.iloc[idx_neg],
+                    show=False
+                )
                 plt.title("SHAP Summary Plot - Classe Negativa (Comestível)")
                 plt.tight_layout()
                 shap_neg_img = _mpl_fig_to_base64(fig_neg)
@@ -452,7 +487,7 @@ def plot_feature_importance_shap(shap_values, feature_names, top_n=20):
         ))
         
         fig.update_layout(
-            title=f"Top-{top_n} Features por Importância SHAP",
+            title="Top Features por Importância SHAP",
             xaxis_title="Importância SHAP (média absoluta)",
             yaxis_title="Feature",
             height=max(400, len(feature_importance) * 25)
@@ -820,7 +855,7 @@ with tab_training:
             st.dataframe(st.session_state.training_model_info, use_container_width=True)
 
         # Botão para limpar resultados
-        if st.button("🗑️ Limpar Resultados", use_container_width=False):
+        if st.button("🗑️ Limpar Resultados", use_container_width=False, key="btn_clear_eval_results"):
             st.session_state.training_completed = False
             st.session_state.training_leaderboard = None
             st.session_state.trained_model = None
@@ -834,9 +869,7 @@ with tab_training:
 # Aba 4 — Evaluate Model
 # =========================================
 with tab_evaluate:
-    st.subheader("Evaluate Model")
-    st.markdown("Visualize os gráficos de avaliação do modelo treinado.")
-    
+
     # Verificar se há modelo treinado disponível
     if st.session_state.training_completed and st.session_state.trained_model is not None:
         model_source_type = "treinado na sessão"
@@ -927,7 +960,8 @@ with tab_evaluate:
         _fallback_y_true_numeric = None
         _fallback_y_pred_numeric = None
         _fallback_y_proba = None
-        for label, plt_name, explanation_key in plots_requested:
+        total_plots = len(plots_requested)
+        for i, (label, plt_name, explanation_key) in enumerate(plots_requested):
             try:
                 st.markdown(f"#### {label}")
                 # Gera o plot do PyCaret e exibe diretamente
@@ -1094,8 +1128,11 @@ with tab_evaluate:
                 pass
 
             # Explicação sempre após o(s) gráfico(s)
-            with st.expander(f"ℹ️ Como interpretar — {label}"):
+            with st.expander(f"Como interpretar — {label}"):
                 st.markdown(EXPLANATIONS_MD.get(explanation_key, "_(Explicação não disponível para este gráfico)_"))
+            # Linha divisória entre gráficos (exceto após o último)
+            if i < total_plots - 1:
+                st.markdown("---")
             
     else:
         st.warning("⚠️ Nenhum modelo treinado disponível!")
@@ -1146,64 +1183,83 @@ with tab_interpret:
                 else:  # via upload
                     model = model_to_use
                 
-                st.success(f"Modelo {model_source_type} carregado para interpretação!")
+                # Mensagem de sucesso removida para evitar redundância
                 
                 # Obter dados transformados
                 X_train_transformed = get_config("X_train_transformed")
                 y_train = get_config("y_train")
                 
-                # Amostra para análise SHAP (limitar para performance)
+                # Amostra para análise SHAP (limitar para performance) — manter alinhamento por rótulo
                 sample_size = min(1000, len(X_train_transformed))
                 X_sample = X_train_transformed.sample(n=sample_size, random_state=RANDOM_STATE)
-                y_sample = y_train.loc[X_sample.index] if hasattr(y_train, 'index') else y_train.iloc[:len(X_sample)]
+                y_sample = y_train.reindex(X_sample.index) if hasattr(y_train, 'reindex') else np.array(y_train)[:len(X_sample)]
+                # Remover possíveis NaN após reindex para manter tamanhos iguais
+                if hasattr(y_sample, 'isna'):
+                    if y_sample.isna().any():
+                        valid_idx = y_sample.dropna().index
+                        X_sample = X_sample.loc[valid_idx]
+                        y_sample = y_sample.loc[valid_idx]
                 
                 # Converter labels para numérico
                 le = LabelEncoder()
                 y_sample_numeric = le.fit_transform(y_sample)
                 
-                if st.button("🔍 Gerar Análise SHAP", use_container_width=False):
+                clicked_shap = st.button("🔍 Gerar Análise SHAP", use_container_width=False, key="btn_generate_shap")
+                if clicked_shap:
                     with st.spinner("Gerando análise SHAP (pode demorar alguns minutos)..."):
                         shap_global, shap_pos, shap_neg = generate_shap_analysis(model, X_sample, y_sample_numeric)
-                    
-                    if shap_global:
-                        st.success("Análise SHAP gerada com sucesso!")
-                        
-                        # SHAP Global
-                        st.markdown("### 📊 SHAP Summary Plot - Global")
-                        st.markdown(shap_global, unsafe_allow_html=True)
-                        render_expander_md("SHAP Global", "shap_global")
-                        
-                        # SHAP por classe
-                        col1, col2 = st.columns(2)
-                        with col1:
-                            if shap_pos:
-                                st.markdown("### 🍄 SHAP - Classe Positiva (Veneno)")
-                                st.markdown(shap_pos, unsafe_allow_html=True)
-                        
-                        with col2:
-                            if shap_neg:
-                                st.markdown("### 🍽️ SHAP - Classe Negativa (Comestível)")
-                                st.markdown(shap_neg, unsafe_allow_html=True)
-                        
-                        # Gráfico de importância SHAP
-                        try:
-                            explainer = shap.TreeExplainer(model)
-                            shap_values = explainer.shap_values(X_sample)
-                            if isinstance(shap_values, list):
-                                shap_values = shap_values[1]  # Usar valores da classe positiva
-                            
-                            feature_names = X_sample.columns.tolist()
-                            fig_shap_imp = plot_feature_importance_shap(shap_values, feature_names, top_n=20)
-                            if fig_shap_imp:
-                                st.plotly_chart(fig_shap_imp, use_container_width=True)
-                        except Exception as e:
-                            st.warning(f"Erro ao gerar gráfico de importância SHAP: {e}")
-                        
-                        # Explicações
-                        render_expander_md("SHAP Local", "shap_local")
-                        render_expander_md("Importância de Features", "feat_importance")
-                    else:
-                        st.error("Falha ao gerar análise SHAP")
+                        if shap_global:
+                            # Persistir resultados na sessão (sem exibir imediatamente para evitar duplicação)
+                            st.session_state.shap_global = shap_global
+                            st.session_state.shap_pos = shap_pos
+                            st.session_state.shap_neg = shap_neg
+                            # Calcular e persistir importância SHAP (se possível)
+                            try:
+                                explainer = shap.TreeExplainer(model)
+                                shap_values = explainer.shap_values(X_sample)
+                                if isinstance(shap_values, list):
+                                    shap_values = shap_values[1]
+                                feature_names = X_sample.columns.tolist()
+                                fig_shap_imp = plot_feature_importance_shap(shap_values, feature_names, top_n=20)
+                                if fig_shap_imp:
+                                    st.session_state.fig_shap_imp = fig_shap_imp
+                            except Exception:
+                                st.session_state.fig_shap_imp = None
+                            st.rerun()
+                        else:
+                            st.error("Falha ao gerar análise SHAP")
+                
+                # Exibir resultados persistidos, se existirem
+                if st.session_state.get("shap_global"):
+                    st.markdown("### 📊 SHAP Summary Plot - Global")
+                    st.markdown(st.session_state.shap_global, unsafe_allow_html=True)
+                    st.markdown("")
+                    render_expander_md("SHAP Global", "shap_global")
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        if st.session_state.get("shap_pos"):
+                            st.markdown("### ☠️ SHAP - Classe Positiva (Venenoso)")
+                            st.markdown(st.session_state.shap_pos, unsafe_allow_html=True)
+                            st.markdown("")
+                            render_expander_md("SHAP Local — Classe Positiva", "shap_local_pos")
+                    with col2:
+                        if st.session_state.get("shap_neg"):
+                            st.markdown("### 🍽️ SHAP - Classe Negativa (Comestível)")
+                            st.markdown(st.session_state.shap_neg, unsafe_allow_html=True)
+                            st.markdown("")
+                            render_expander_md("SHAP Local — Classe Negativa", "shap_local_neg")
+                    if st.session_state.get("fig_shap_imp") is not None:
+                        st.plotly_chart(st.session_state.fig_shap_imp, use_container_width=True)
+                        st.markdown("")
+                        render_expander_md("Importância de Features (Treinamento)", "feat_importance_model")
+                        render_expander_md("Importância de Features por SHAP", "feat_importance_shap")
+
+                    # Botão para limpar resultados persistidos
+                    if st.button("🗑️ Limpar Resultados", use_container_width=False, key="btn_clear_shap_results"):
+                        for _k in ["shap_global", "shap_pos", "shap_neg", "fig_shap_imp"]:
+                            st.session_state.pop(_k, None)
+                        st.success("Resultados SHAP limpos.")
+                        st.rerun()
                         
         except Exception as e:
             st.error(f"Falha na interpretação: {e}")
