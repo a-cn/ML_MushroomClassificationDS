@@ -141,7 +141,7 @@ Mede relevância de cada *feature* para o modelo, mas o significado varia confor
 Reflete a importância calculada durante o treinamento do estimador (ex.: ganho de impureza em árvores).  
 - Árvores/Florestas: soma do ganho de impureza (Gini/Entropia) ao usar a feature nos splits.  
 - Interpretação: valores maiores indicam que a feature ajudou mais a separar as classes ao treinar.  
-- Cuidados: pode favorecer variáveis com mais níveis; correlações podem “dividir” importância entre variáveis similares.
+- Cuidados: pode favorecer variáveis com mais níveis; correlações podem "dividir" importância entre variáveis similares.
 """,
     "feat_importance_shap": """
 **Importância de Features por SHAP**  
@@ -684,15 +684,15 @@ uploaded_model = st.sidebar.file_uploader(
 model_basename = None
 
 # Abas
-tab_explain, tab_eda, tab_training, tab_evaluate, tab_interpret, tab_validate, tab_predict, tab_export = st.tabs([
+tab_explain, tab_eda, tab_training, tab_evaluate, tab_interpret, tab_predict, tab_validate, tab_export = st.tabs([
     "Orientações",
-    "EDA (ydata-profiling)",
+    "EDA (profiling)",
     "Treino & Métricas",
     "Evaluate Model",
     "Interpretação (SHAP)",
-    "Validação (Dados Sem Rótulo)",
     "Predição Interativa",
-    "Exportar Relatório"
+    "Validação (Dados Sem Rótulo)",
+    "Exportar"
 ])
 
 # =========================================
@@ -737,7 +737,7 @@ with tab_eda:
 # =========================================
 with tab_training:
     st.subheader("Treino & Métricas")
-    st.markdown("Clique para **carregar** o dataset, **treinar** e **visualizar** os resultados principais (Leaderboard e plots).")
+    st.markdown("Clique para **carregar** o dataset, **treinar** e **visualizar** os resultados principais (setup, laderboard e treino).")
 
     # Estados em sessão para treinamento
     if "training_data" not in st.session_state:
@@ -876,7 +876,7 @@ with tab_training:
 # Aba 4 — Evaluate Model
 # =========================================
 with tab_evaluate:
-
+    
     # Verificar se há modelo treinado disponível
     if st.session_state.training_completed and st.session_state.trained_model is not None:
         model_source_type = "treinado na sessão"
@@ -1010,7 +1010,10 @@ with tab_evaluate:
                                 importance_dict = dict(zip(feature_names, importances))
                                 fig = plot_feature_importance_advanced(importance_dict, top_n=20)
                                 st.plotly_chart(fig, use_container_width=True)
-                        st.info("Importâncias de features indisponíveis para este modelo.")
+                            else:
+                                st.info("Importâncias de features indisponíveis para este modelo.")
+                        else:
+                            st.info("Importâncias de features indisponíveis para este modelo.")
 
                     # Calibration Curve — fallback com nossa função
                     if plt_name == "calibration":
@@ -1215,26 +1218,26 @@ with tab_interpret:
                 if clicked_shap:
                     with st.spinner("Gerando análise SHAP (pode demorar alguns minutos)..."):
                         shap_global, shap_pos, shap_neg = generate_shap_analysis(model, X_sample, y_sample_numeric)
-                        if shap_global:
-                            # Persistir resultados na sessão (sem exibir imediatamente para evitar duplicação)
-                            st.session_state.shap_global = shap_global
-                            st.session_state.shap_pos = shap_pos
-                            st.session_state.shap_neg = shap_neg
-                            # Calcular e persistir importância SHAP (se possível)
-                            try:
-                                explainer = shap.TreeExplainer(model)
-                                shap_values = explainer.shap_values(X_sample)
-                                if isinstance(shap_values, list):
-                                    shap_values = shap_values[1]
-                                feature_names = X_sample.columns.tolist()
-                                fig_shap_imp = plot_feature_importance_shap(shap_values, feature_names, top_n=20)
-                                if fig_shap_imp:
-                                    st.session_state.fig_shap_imp = fig_shap_imp
-                            except Exception:
-                                st.session_state.fig_shap_imp = None
-                            st.rerun()
-                        else:
-                            st.error("Falha ao gerar análise SHAP")
+                    if shap_global:
+                        # Persistir resultados na sessão (sem exibir imediatamente para evitar duplicação)
+                        st.session_state.shap_global = shap_global
+                        st.session_state.shap_pos = shap_pos
+                        st.session_state.shap_neg = shap_neg
+                        # Calcular e persistir importância SHAP (se possível)
+                        try:
+                            explainer = shap.TreeExplainer(model)
+                            shap_values = explainer.shap_values(X_sample)
+                            if isinstance(shap_values, list):
+                                shap_values = shap_values[1]
+                            feature_names = X_sample.columns.tolist()
+                            fig_shap_imp = plot_feature_importance_shap(shap_values, feature_names, top_n=20)
+                            if fig_shap_imp:
+                                st.session_state.fig_shap_imp = fig_shap_imp
+                        except Exception:
+                            st.session_state.fig_shap_imp = None
+                        st.rerun()
+                    else:
+                        st.error("Falha ao gerar análise SHAP")
                 
                 # Exibir resultados persistidos, se existirem
                 if st.session_state.get("shap_global"):
@@ -1447,7 +1450,7 @@ with tab_predict:
 
                     # Divisória entre o botão e os resultados subsequentes
                     st.markdown("---")
-
+                    
                     # Validação adicional dos dados
                     st.markdown("#### 📋 Validação dos Dados")
                     col1, col2 = st.columns(2)
@@ -1467,7 +1470,7 @@ with tab_predict:
                         # Verificar compatibilidade (loader temporário)
                         with st.spinner("Verificando compatibilidade..."):
                             pass
-
+                    
                     # Executar predição
                     with st.spinner("Executando predição..."):
                         out = predict_model(model, data=df_one)
@@ -1518,7 +1521,7 @@ with tab_predict:
                         - Este modelo é apenas para fins educacionais
                         - **ERRO** pode ser **FATAL**
                         """)
-
+                    
                     # Histórico de predições (session state)
                     if 'prediction_history' not in st.session_state:
                         st.session_state.prediction_history = []
@@ -1617,6 +1620,8 @@ with tab_explain:
        - Lembre-se: este app é apenas educacional. Não utilize para decisões reais sobre cogumelos.
     """)
 
+    st.markdown("---")
+    
     # Aviso de segurança principal
     st.error("⚠️ **AVISO IMPORTANTE DE SEGURANÇA**")
     st.markdown("""
@@ -1654,23 +1659,62 @@ def export_everything_html(
     </div>
     """)
     
-    # Resumo das métricas
+    # Resumo das métricas (nomes e ordem conforme Evaluate Model)
     if any([ap_value, auc_value, accuracy_value, precision_value, recall_value, f1_value]):
         metrics_html = "<div class='card'><h2>📊 Resumo das Métricas</h2><div class='metrics-grid'>"
-        if accuracy_value: metrics_html += f"<div class='metric'><b>Acurácia:</b> {accuracy_value:.4f}</div>"
-        if precision_value: metrics_html += f"<div class='metric'><b>Precisão:</b> {precision_value:.4f}</div>"
-        if recall_value: metrics_html += f"<div class='metric'><b>Recall:</b> {recall_value:.4f}</div>"
-        if f1_value: metrics_html += f"<div class='metric'><b>F1-Score:</b> {f1_value:.4f}</div>"
-        if auc_value: metrics_html += f"<div class='metric'><b>AUC-ROC:</b> {auc_value:.4f}</div>"
-        if ap_value: metrics_html += f"<div class='metric'><b>AP (PR-AUC):</b> {ap_value:.4f}</div>"
+        order_metrics = [
+            ("Acurácia", accuracy_value),
+            ("AUC-ROC", auc_value),
+            ("Recall", recall_value),
+            ("Precisão", precision_value),
+            ("F1-Score", f1_value),
+            ("AP (PR-AUC)", ap_value),
+        ]
+        for name, val in order_metrics:
+            if val is not None:
+                metrics_html += f"<div class='metric'><b>{name}:</b> {val:.4f}</div>"
         metrics_html += "</div></div>"
         sections.append(metrics_html)
     
-    # Gráficos
+    # Gráficos/diagramas — ordem exatamente como na aba Evaluate Model
     if figs_metricas:
-        for title, fig in figs_metricas.items():
+        ordered_titles = [
+            "Pipeline Plot",
+            "Feature Importance",
+            "Learning Curve",
+            "Validation Curve",
+            "AUC",
+            "Threshold",
+            "Confusion Matrix",
+            "Class Report",
+            "Precision Recall",
+            "Prediction Error",
+            "Calibration Curve",
+            "Manifold Learning",
+            "Decision Tree",
+        ]
+        consumed = set()
+        for title in ordered_titles:
+            if title not in figs_metricas:
+                continue
+            fig = figs_metricas[title]
             try:
-                sections.append(f"<div class='card'><h2>{title}</h2>{_fig_to_html_snippet(fig)}</div>")
+                if isinstance(fig, str):
+                    sections.append(f"<div class='card'><h2>{title}</h2>{fig}</div>")
+                else:
+                    sections.append(f"<div class='card'><h2>{title}</h2>{_fig_to_html_snippet(fig)}</div>")
+                consumed.add(title)
+            except Exception as e:
+                sections.append(f"<div class='card'><h2>{title}</h2><p>Erro ao gerar gráfico: {e}</p></div>")
+        # Itens adicionais (ex.: SHAP) não contemplados na lista acima
+        for title, fig in figs_metricas.items():
+            if title in consumed:
+                continue
+            try:
+                if isinstance(fig, str):
+                    sections.append(f"<div class='card'><h2>{title}</h2>{fig}</div>")
+                else:
+                    sections.append(f"<div class='card'><h2>{title}</h2>{_fig_to_html_snippet(fig)}</div>")
             except Exception as e:
                 sections.append(f"<div class='card'><h2>{title}</h2><p>Erro ao gerar gráfico: {e}</p></div>")
     
@@ -1730,6 +1774,19 @@ with tab_export:
         st.info("💡 Treine um modelo na aba 'Treino & Métricas' ou carregue um modelo (.pkl) na sidebar.")
     else:
         st.info(f"ℹ️ Usando o modelo {model_source_type}")
+        # Mostrar prévia persistida, se houver
+        if st.session_state.get("export_html_content"):
+            st.markdown("### Prévia do Relatório")
+            st.components.v1.html(st.session_state.export_html_content, height=600, scrolling=True)
+            if st.session_state.get("export_html_bytes"):
+                st.download_button(
+                    "💾 Baixar Relatório HTML Completo",
+                    data=st.session_state.export_html_bytes,
+                    file_name="relatorio_completo_cogumelos.html",
+                    mime="text/html",
+                    use_container_width=False
+                )
+
         if st.button("📦 Gerar Relatório HTML Completo", use_container_width=False):
             try:
                 # Carregar dados e modelo para exportação
@@ -1758,41 +1815,195 @@ with tab_export:
                 else:  # via upload
                     model = model_to_use
                 
-                # Obter predições e métricas
-                predictions = predict_model(model, data=df)
-                y_true = df[target_col]
-                y_pred = predictions['prediction_label']
-                y_proba = predictions['prediction_score']
+                # Obter predições e métricas alinhadas ao treinamento
+                # Usar dados de validação/treino transformados do PyCaret quando disponíveis
+                try:
+                    X_train_transformed = get_config("X_train_transformed")
+                    y_train = get_config("y_train")
+                    preds_train = predict_model(model, data=X_train_transformed.copy())
+                    y_true = y_train
+                    y_pred = preds_train['prediction_label']
+                    y_proba = preds_train['prediction_score']
+                except Exception:
+                    # Fallback: usar df completo como antes
+                    predictions = predict_model(model, data=df)
+                    y_true = df[target_col]
+                    y_pred = predictions['prediction_label']
+                    y_proba = predictions['prediction_score']
                 
                 # Converter labels para valores numéricos para as métricas
                 le = LabelEncoder()
                 y_true_numeric = le.fit_transform(y_true)
                 y_pred_numeric = le.transform(y_pred)
                 
-                # Calcular métricas
+                # Calcular métricas (baseadas no modelo)
                 accuracy = accuracy_score(y_true_numeric, y_pred_numeric)
-                precision = precision_score(y_true_numeric, y_pred_numeric, average='weighted')
-                recall = recall_score(y_true_numeric, y_pred_numeric, average='weighted')
-                f1 = f1_score(y_true_numeric, y_pred_numeric, average='weighted')
+                precision = precision_score(y_true_numeric, y_pred_numeric, average='weighted', zero_division=0)
+                recall = recall_score(y_true_numeric, y_pred_numeric, average='weighted', zero_division=0)
+                f1 = f1_score(y_true_numeric, y_pred_numeric, average='weighted', zero_division=0)
                 auc_roc = roc_auc_score(y_true_numeric, y_proba)
                 ap = average_precision_score(y_true_numeric, y_proba)
                 
-                # Gerar gráficos para exportação
+                # Gerar gráficos/diagramas para exportação (ordem exatamente como na aba Evaluate Model)
                 figs_metricas = {}
                 try:
-                    figs_metricas["Curva ROC"] = plot_roc_curve_advanced(y_true_numeric, y_proba)
-                    figs_metricas["Curva Precision-Recall"] = plot_pr_curve_advanced(y_true_numeric, y_proba)
-                    # Curva de Calibração (consistente com Evaluate Model)
-                    figs_metricas["Curva de Calibração"] = plot_calibration_curve_advanced(y_true_numeric, y_proba)
-                    class_names = sorted(y_true.unique())
-                    figs_metricas["Matriz de Confusão"], _ = plot_confusion_matrix_advanced(y_true_numeric, y_pred_numeric, class_names)
-                    
-                    # Importância de features
+                    # 1) Pipeline Plot (HTML simples)
+                    pipeline_html = """
+                    <div style='display:flex;gap:8px;flex-wrap:wrap'>
+                      <div style='background:#2a2a2a;padding:8px 12px;border-radius:8px'>Dados</div>
+                      <div style='align-self:center'>→</div>
+                      <div style='background:#2a2a2a;padding:8px 12px;border-radius:8px'>Pré-processamento</div>
+                      <div style='align-self:center'>→</div>
+                      <div style='background:#2a2a2a;padding:8px 12px;border-radius:8px'>Seleção de Features</div>
+                      <div style='align-self:center'>→</div>
+                      <div style='background:#2a2a2a;padding:8px 12px;border-radius:8px'>Modelo: Decision Tree</div>
+                      <div style='align-self:center'>→</div>
+                      <div style='background:#2a2a2a;padding:8px 12px;border-radius:8px'>Validação (K-Fold)</div>
+                    </div>
+                    """
+                    figs_metricas["Pipeline Plot"] = pipeline_html
+
+                    # 2) Feature Importance (treinamento)
                     if hasattr(model, 'feature_importances_'):
                         feature_names = get_config("X_train_transformed").columns.tolist()
                         importances = model.feature_importances_
                         importance_dict = dict(zip(feature_names, importances))
-                        figs_metricas["Importância de Features"] = plot_feature_importance_advanced(importance_dict, top_n=20)
+                        figs_metricas["Feature Importance"] = plot_feature_importance_advanced(importance_dict, top_n=20)
+
+                    # 3) Learning Curve — não disponível nesta exportação
+                    # 4) Validation Curve — não disponível nesta exportação
+
+                    # 3) Learning Curve — tentar via PyCaret
+                    try:
+                        fig_learning = plot_model(model, plot="learning", display_format="plotly")
+                        if fig_learning is not None:
+                            figs_metricas["Learning Curve"] = fig_learning
+                    except Exception:
+                        pass
+
+                    # 4) Validation Curve — tentar via PyCaret
+                    try:
+                        fig_vc = plot_model(model, plot="vc", display_format="plotly")
+                        if fig_vc is not None:
+                            figs_metricas["Validation Curve"] = fig_vc
+                    except Exception:
+                        pass
+
+                    # 5) AUC (ROC)
+                    figs_metricas["AUC"] = plot_roc_curve_advanced(y_true_numeric, y_proba)
+                    # 6) Threshold
+                    try:
+                        fig_threshold, _ = plot_threshold_analysis(y_true_numeric, y_proba)
+                        figs_metricas["Threshold"] = fig_threshold
+                    except Exception:
+                        pass
+                    # 7) Confusion Matrix
+                    class_names = sorted(y_true.unique())
+                    figs_metricas["Confusion Matrix"], _ = plot_confusion_matrix_advanced(y_true_numeric, y_pred_numeric, class_names)
+                    # 8) Class Report (tabela HTML)
+                    try:
+                        rep = classification_report(y_true_numeric, y_pred_numeric, output_dict=True, zero_division=0)
+                        rep_df = pd.DataFrame(rep).T.round(3)
+                        class_report_html = rep_df.to_html(classes='table', border=0)
+                        figs_metricas["Class Report"] = class_report_html
+                    except Exception:
+                        pass
+                    # 9) Precision-Recall
+                    figs_metricas["Precision Recall"] = plot_pr_curve_advanced(y_true_numeric, y_proba)
+                    # 10) Prediction Error — tentar via PyCaret
+                    try:
+                        fig_error = plot_model(model, plot="error", display_format="plotly")
+                        if fig_error is not None:
+                            figs_metricas["Prediction Error"] = fig_error
+                    except Exception:
+                        pass
+                    # 11) Calibration Curve
+                    figs_metricas["Calibration Curve"] = plot_calibration_curve_advanced(y_true_numeric, y_proba)
+                    # 12) Manifold Learning — tentar via PyCaret
+                    try:
+                        fig_manifold = plot_model(model, plot="manifold", display_format="plotly")
+                        if fig_manifold is not None:
+                            figs_metricas["Manifold Learning"] = fig_manifold
+                    except Exception:
+                        pass
+                    # 13) Decision Tree (imagem base64)
+                    try:
+                        import matplotlib.pyplot as _plt
+                        from sklearn import tree as _sk_tree
+                        try:
+                            feature_names = get_config("X_train_transformed").columns.tolist()
+                        except Exception:
+                            feature_names = None
+                        classes = [str(c) for c in sorted(y_true.unique().tolist())]
+                        fig_tree = _plt.figure(figsize=(16, 9))
+                        _sk_tree.plot_tree(
+                            model,
+                            feature_names=feature_names,
+                            class_names=classes,
+                            filled=True,
+                            rounded=True,
+                            fontsize=8
+                        )
+                        _plt.tight_layout()
+                        # Converter matplotlib em HTML base64 para incorporação
+                        figs_metricas["Decision Tree"] = _mpl_fig_to_base64(fig_tree)
+                        _plt.close(fig_tree)
+                    except Exception:
+                        pass
+
+                    # Seções de Interpretação (SHAP)
+                    if SHAP_OK:
+                        try:
+                            # Preferir resultados persistidos da aba Interpretação
+                            if st.session_state.get("shap_global"):
+                                figs_metricas["SHAP — Global"] = st.session_state.shap_global
+                            if st.session_state.get("shap_pos"):
+                                figs_metricas["SHAP — Classe Positiva (Venenoso)"] = st.session_state.shap_pos
+                            if st.session_state.get("shap_neg"):
+                                figs_metricas["SHAP — Classe Negativa (Comestível)"] = st.session_state.shap_neg
+                            if st.session_state.get("fig_shap_imp") is not None:
+                                figs_metricas["SHAP — Importância de Features"] = st.session_state.fig_shap_imp
+
+                            # Se não houver persistidos, gerar rapidamente
+                            need_generate = not any([
+                                st.session_state.get("shap_global"),
+                                st.session_state.get("shap_pos"),
+                                st.session_state.get("shap_neg"),
+                            ])
+                            if need_generate:
+                                try:
+                                    Xt = get_config("X_train_transformed")
+                                    yt = get_config("y_train")
+                                    sample_size = min(500, len(Xt))
+                                    Xs = Xt.sample(n=sample_size, random_state=RANDOM_STATE)
+                                    # Codificar y para classes 0/1 se necessário
+                                    y_enc = yt.loc[Xs.index] if hasattr(yt, 'loc') else yt[:len(Xs)]
+                                    if hasattr(y_enc, 'values'):
+                                        y_enc = y_enc.values
+                                    # Se y não for {0,1}, tentar LabelEncoder
+                                    if not np.array_equal(np.unique(y_enc), np.array([0,1])):
+                                        _le_tmp = LabelEncoder()
+                                        y_enc = _le_tmp.fit_transform(y_enc)
+                                    g, p, n = generate_shap_analysis(model, Xs, y_enc)
+                                    if g:
+                                        figs_metricas["SHAP — Global"] = g
+                                    if p:
+                                        figs_metricas["SHAP — Classe Positiva (Venenoso)"] = p
+                                    if n:
+                                        figs_metricas["SHAP — Classe Negativa (Comestível)"] = n
+                                    # Importância SHAP
+                                    try:
+                                        explainer = shap.TreeExplainer(model)
+                                        sv = explainer.shap_values(Xs)
+                                        if isinstance(sv, list):
+                                            sv = sv[1]
+                                        figs_metricas["SHAP — Importância de Features"] = plot_feature_importance_shap(sv, Xs.columns.tolist(), top_n=20)
+                                    except Exception:
+                                        pass
+                                except Exception:
+                                    pass
+                        except Exception:
+                            pass
                 except Exception as e:
                     st.warning(f"Erro ao gerar alguns gráficos: {e}")
                 
@@ -1808,24 +2019,12 @@ with tab_export:
                 )
                 
                 st.success(f"Relatório HTML gerado com sucesso!")
-                st.info(f"Arquivo salvo em: {html_path}")
-                
-                # Download do relatório
-                with open(html_path, "rb") as f:
-                    st.download_button(
-                        "💾 Baixar Relatório HTML Completo",
-                        data=f.read(),
-                        file_name="relatorio_completo_cogumelos.html",
-                        mime="text/html",
-                        use_container_width=False
-                    )
-                
-                # Mostrar prévia do relatório
+                # Persistir prévia e bytes para download
                 with open(html_path, "r", encoding="utf-8") as f:
-                    html_content = f.read()
-                
-                st.markdown("### Prévia do Relatório")
-                st.components.v1.html(html_content, height=600, scrolling=True)
+                    st.session_state.export_html_content = f.read()
+                with open(html_path, "rb") as f:
+                    st.session_state.export_html_bytes = f.read()
+                st.rerun()
                 
             except Exception as e:
                 st.error(f"Falha na exportação: {e}")
