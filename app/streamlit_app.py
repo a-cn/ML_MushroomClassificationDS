@@ -181,11 +181,6 @@ Cada ponto é o efeito de uma amostra em uma *feature*:
 - Cor (geralmente) = valor da *feature* (baixo→alto).  
 Dá visão de direção e força média do efeito de cada variável.
 """,
-    "shap_local": """
-**SHAP — Local (barra por amostra)**  
-Mostra as *features* que mais empurraram **esta** previsão para cima (venenoso) ou para baixo (comestível).  
-Útil para justificar predições específicas e entender o "porquê" de cada classificação.
-""",
     "shap_local_pos": """
 **SHAP — Classe Positiva (Venenoso)**  
 Este sumário foca amostras previstas/rotuladas como **venenosas**.  
@@ -940,7 +935,7 @@ with tab_evaluate:
         # Lista de plots, na ordem solicitada
         plots_requested = [
             ("Pipeline Plot", "pipeline", "pipeline"),
-            ("Feature Importance", "feature", "feat_importance"),
+            ("Feature Importance", "feature", "feat_importance_model"),
             ("Learning Curve", "learning", "learning_curve"),
             ("Validation Curve", "vc", "validation"),
             ("AUC", "auc", "auc_roc"),
@@ -1251,7 +1246,6 @@ with tab_interpret:
                     if st.session_state.get("fig_shap_imp") is not None:
                         st.plotly_chart(st.session_state.fig_shap_imp, use_container_width=True)
                         st.markdown("")
-                        render_expander_md("Importância de Features (Treinamento)", "feat_importance_model")
                         render_expander_md("Importância de Features por SHAP", "feat_importance_shap")
 
                     # Botão para limpar resultados persistidos
