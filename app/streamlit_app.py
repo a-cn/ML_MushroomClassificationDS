@@ -169,6 +169,18 @@ Visualiza como as amostras se agrupam no espaço de features reduzido.
 - **PCA**: preserva variância máxima
 - **t-SNE**: preserva estruturas locais (mais visual)
 """,
+    "val_class_dist": """
+**Distribuição das Classes Preditas**  
+Mostra quantas amostras foram classificadas em cada classe.  
+- Picos desbalanceados podem indicar viés do modelo.  
+- Compare com a distribuição esperada do problema para verificar se há tendência excessiva a uma classe.
+""",
+    "val_prob_dist": """
+**Distribuição das Probabilidades**  
+Histograma das probabilidades preditas para a classe positiva (venenoso).  
+- Picos perto de 0 ou 1 indicam predições mais confiantes; concentração em torno de 0.5 indica incerteza.  
+- Útil para escolher thresholds e avaliar calibragem das probabilidades.
+""",
     "eda": """
 **Análise Exploratória de Dados (EDA)**  
 Exame inicial dos dados para entender padrões, distribuições e relações.  
@@ -622,7 +634,7 @@ def get_available_model():
 # =========================================
 # UI — Sidebar e Tabs
 # =========================================
-st.title("🍄 Classificação de Cogumelos — Treinamento/Upload + XAI + Análise Completa")
+st.title("🍄 Classificação de Cogumelos — Treinamento + Upload + XAI + Análise Completa")
 
 # Sidebar
 st.sidebar.header("⚙️ Configurações")
@@ -710,7 +722,7 @@ with tab_eda:
             # Botão de download (sem salvar automaticamente)
         if 'html_str' in locals():
             st.download_button(
-                "⬇️ Baixar relatório (HTML)", 
+                "💾 Baixar relatório (HTML)", 
                 data=html_str.encode("utf-8"),
                 file_name="pandas_profiling_mushrooms.html",
                 mime="text/html", 
@@ -1287,7 +1299,7 @@ with tab_validate:
                 df = load_mushrooms_csv(path=data_path)
             
             # Upload de arquivo CSV
-            st.markdown("### 📁 Upload de Dados para Validação")
+            st.markdown("#### 📁 Upload de Dados para Validação")
             uploaded_file = st.file_uploader(
                 "Envie um arquivo CSV com dados de cogumelos (mesmas colunas do dataset original, SEM a coluna 'class')",
                 type=['csv'],
@@ -1308,7 +1320,7 @@ with tab_validate:
                         st.error(f"❌ Colunas obrigatórias ausentes: {missing_cols}")
                     else:
                         # Mostrar prévia dos dados
-                        st.markdown("### Prévia dos Dados")
+                        st.markdown("#### Prévia dos Dados")
                         st.dataframe(df_validate.head(10), use_container_width=True)
                         
                         if st.button("Executar Validação", use_container_width=False):
@@ -1336,6 +1348,8 @@ with tab_validate:
                                         height=400
                                     )
                                     st.plotly_chart(fig_dist, use_container_width=True)
+                                    st.markdown("")
+                                    render_expander_md("Distribuição das Classes Preditas", "val_class_dist")
                                 
                                 with col2:
                                     st.markdown("#### Distribuição das Probabilidades")
@@ -1350,12 +1364,13 @@ with tab_validate:
                                         height=400
                                     )
                                     st.plotly_chart(fig_prob, use_container_width=True)
+                                    st.markdown("")
+                                    render_expander_md("Distribuição das Probabilidades", "val_prob_dist")
                                 
                                 # Download dos resultados
-                                st.markdown("#### 💾 Download dos Resultados")
                                 csv_data = predictions.to_csv(index=False).encode('utf-8')
                                 st.download_button(
-                                    "⬇️ Baixar Resultados (CSV)",
+                                    "💾 Baixar Resultados (CSV)",
                                     data=csv_data,
                                     file_name="validacao_cogumelos.csv",
                                     mime="text/csv",
@@ -1396,7 +1411,7 @@ with tab_predict:
                 df = load_mushrooms_csv(path=data_path)
 
             # Predição única (form dinâmico com categorias do CSV)
-            st.markdown("#### 🎯 Predição única")
+            st.markdown("#### 📍 Predição única")
             cats = {c: sorted(df[c].dropna().unique().tolist())
                     for c in df.columns if c != target_col}
             cols = list(cats.keys())
@@ -1429,7 +1444,10 @@ with tab_predict:
             if st.button("🔮 Prever (amostra única)", use_container_width=False, disabled=len(validation_errors) > 0):
                 try:
                     df_one = pd.DataFrame([values])
-                    
+
+                    # Divisória entre o botão e os resultados subsequentes
+                    st.markdown("---")
+
                     # Validação adicional dos dados
                     st.markdown("#### 📋 Validação dos Dados")
                     col1, col2 = st.columns(2)
@@ -1446,10 +1464,10 @@ with tab_predict:
                             st.error(f"❌ Colunas ausentes: {missing_cols}")
                         else:
                             st.success("✅ Todas as colunas presentes")
-                        
-                        # Verificar tipos de dados
-                        st.info("ℹ️ Verificando compatibilidade...")
-                    
+                        # Verificar compatibilidade (loader temporário)
+                        with st.spinner("Verificando compatibilidade..."):
+                            pass
+
                     # Executar predição
                     with st.spinner("Executando predição..."):
                         out = predict_model(model, data=df_one)
@@ -1472,7 +1490,7 @@ with tab_predict:
                         st.metric("Confiança", confidence)
                 
                     # Análise de confiança
-                    st.markdown("#### 🎯 Análise de Confiança")
+                    st.markdown("#### 🛡️ Análise de Confiança")
                     if score > 0.8:
                         st.success("🟢 **Alta Confiança**: O modelo está muito confiante na predição")
                     elif score < 0.2:
@@ -1500,61 +1518,7 @@ with tab_predict:
                         - Este modelo é apenas para fins educacionais
                         - **ERRO** pode ser **FATAL**
                         """)
-                
-                    # Explicação das features (se SHAP disponível)
-                    if SHAP_OK and st.checkbox("🔍 Mostrar Explicação Detalhada (SHAP)"):
-                        try:
-                            with st.spinner("Gerando explicação SHAP..."):
-                                # Setup para SHAP
-                                _ = setup(
-                                    data=df,
-                                    target=target_col,
-                                    session_id=1,
-                                    feature_selection=True,
-                                    feature_selection_method="classic",
-                                    remove_multicollinearity=True,
-                                    multicollinearity_threshold=0.9,
-                                    low_variance_threshold=0.05,
-                                    verbose=False
-                                )
-                                
-                                # Gerar SHAP para esta amostra
-                                explainer = shap.TreeExplainer(model)
-                                shap_values = explainer.shap_values(df_one)
-                                
-                                if isinstance(shap_values, list):
-                                    shap_values = shap_values[1]  # Classe positiva
-                                
-                                # Gráfico de importância para esta amostra
-                                feature_names = df_one.columns.tolist()
-                                importance = np.abs(shap_values).mean(0)
-                                
-                                # Top features que mais influenciaram
-                                feature_importance = pd.DataFrame({
-                                    'feature': feature_names,
-                                    'importance': importance[0] if len(importance.shape) > 1 else importance
-                                }).sort_values('importance', ascending=True).tail(10)
-                                
-                                fig_local = go.Figure(go.Bar(
-                                    x=feature_importance['importance'],
-                                    y=feature_importance['feature'],
-                                    orientation='h',
-                                    marker_color='lightcoral'
-                                ))
-                                
-                                fig_local.update_layout(
-                                    title="Features que Mais Influenciaram Esta Predição",
-                                    xaxis_title="Importância SHAP",
-                                    yaxis_title="Feature",
-                                    height=400
-                                )
-                                
-                                st.plotly_chart(fig_local, use_container_width=True)
-                                st.success("Explicação SHAP gerada com sucesso!")
-                                
-                        except Exception as e:
-                            st.warning(f"Erro ao gerar explicação SHAP: {e}")
-                    
+
                     # Histórico de predições (session state)
                     if 'prediction_history' not in st.session_state:
                         st.session_state.prediction_history = []
@@ -1569,7 +1533,7 @@ with tab_predict:
                     
                     # Mostrar histórico
                     if len(st.session_state.prediction_history) > 1:
-                        st.markdown("#### 📚 Histórico de Predições")
+                        st.markdown("#### ⏳ Histórico de Predições")
                         history_df = pd.DataFrame(st.session_state.prediction_history)
                         st.dataframe(history_df[['timestamp', 'prediction', 'probability']], use_container_width=True)
                         
@@ -1587,7 +1551,7 @@ with tab_predict:
             if file is not None:
                 try:
                     df_in = pd.read_csv(file)
-                    st.write("Prévia:", df_in.head())
+                    st.write("#### Prévia dos Dados", df_in.head())
                     if st.button("🔮 Prever lote", use_container_width=False):
                         preds = predict_model(model, data=df_in.copy())
                         preds = preds.rename(columns={
@@ -1597,7 +1561,7 @@ with tab_predict:
                         st.success("Predições geradas!")
                         st.dataframe(preds.head(50), use_container_width=True)
                         st.download_button(
-                            "⬇️ Baixar resultados (CSV)",
+                            "💾 Baixar resultados (CSV)",
                             data=preds.to_csv(index=False).encode("utf-8"),
                             file_name="predicoes_mushrooms.csv",
                             mime="text/csv",
@@ -1613,8 +1577,46 @@ with tab_predict:
 # Aba 1 — Orientações
 # =========================================
 with tab_explain:
-    st.subheader("Orientações")
-    
+    # Passo a passo de uso
+    st.markdown("""
+    ### 📚 Como Usar o Aplicativo
+    1. **Configuração inicial (Sidebar)**
+       - Selecione a fonte de dados: `Local (ENV/Path)` ou `Upload (CSV)`.
+       - Opcional: envie um modelo `.pkl` na seção "Modelo" para usar nas abas de análise.
+
+    2. **EDA (ydata-profiling)**
+       - Opcional: clique em "Gerar relatório (profiling)" para um resumo exploratório do dataset.
+       - Baixe o HTML se quiser compartilhar ou documentar.
+
+    3. **Treino & Métricas**
+       - Clique em "Carregar, Treinar e Visualizar" para executar o `setup`, comparar modelos e treinar o melhor modelo (`Decision Tree`).
+       - Veja o `Leaderboard`, informações de `setup` e do modelo treinado.
+
+    4. **Evaluate Model**
+       - Visualize os gráficos/diagramas de avaliação do modelo na ordem sugerida (pipeline, importância, curvas, relatórios, etc.).
+       - Use os expanders "Como interpretar" para entender cada visualização.
+
+    5. **Interpretação (SHAP)**
+       - Clique em "Gerar Análise SHAP" para visualizar `Global`, `Classe Positiva` (venenoso) e `Classe Negativa` (comestível).
+       - As visualizações ficam persistidas até você limpar os resultados.
+
+    6. **Validação (Dados Sem Rótulo)**
+       - Envie um CSV sem a coluna `class` e clique em "Executar Validação".
+       - Veja a distribuição de classes preditas e probabilidades e baixe os resultados em CSV.
+
+    7. **Predição Interativa**
+       - Preencha os campos com os valores de uma amostra e clique em "Prever (amostra única)".
+       - Para lote, envie um CSV com as mesmas colunas originais (sem `class`) e clique em "Prever lote".
+
+    8. **Exportar Relatório**
+       - Gere um **HTML completo** com métricas e visualizações e faça o download.
+
+    9. **Dicas**
+       - Caso altere a fonte de dados, reexecute as seções conforme necessário.
+       - Alguns gráficos dependem de bibliotecas opcionais; mensagens orientarão se algo estiver faltando.
+       - Lembre-se: este app é apenas educacional. Não utilize para decisões reais sobre cogumelos.
+    """)
+
     # Aviso de segurança principal
     st.error("⚠️ **AVISO IMPORTANTE DE SEGURANÇA**")
     st.markdown("""
@@ -1680,7 +1682,7 @@ def export_everything_html(
         <li><b>AUC-ROC</b>: {_md_to_inline_html(EXPLANATIONS_MD['auc_roc'])}</li>
         <li><b>AP (PR-AUC)</b>: {_md_to_inline_html(EXPLANATIONS_MD['ap_pr'])}</li>
         <li><b>Matriz de Confusão</b>: {_md_to_inline_html(EXPLANATIONS_MD['cm'])}</li>
-        <li><b>Importância de Features</b>: {_md_to_inline_html(EXPLANATIONS_MD['feat_importance'])}</li>
+        <li><b>Importância de Features (Treinamento)</b>: {_md_to_inline_html(EXPLANATIONS_MD['feat_importance_model'])}</li>
         <li><b>Calibração</b>: {_md_to_inline_html(EXPLANATIONS_MD['calibration'])}</li>
         <li><b>EDA</b>: {_md_to_inline_html(EXPLANATIONS_MD['eda'])}</li>
       </ul>
@@ -1780,6 +1782,8 @@ with tab_export:
                 try:
                     figs_metricas["Curva ROC"] = plot_roc_curve_advanced(y_true_numeric, y_proba)
                     figs_metricas["Curva Precision-Recall"] = plot_pr_curve_advanced(y_true_numeric, y_proba)
+                    # Curva de Calibração (consistente com Evaluate Model)
+                    figs_metricas["Curva de Calibração"] = plot_calibration_curve_advanced(y_true_numeric, y_proba)
                     class_names = sorted(y_true.unique())
                     figs_metricas["Matriz de Confusão"], _ = plot_confusion_matrix_advanced(y_true_numeric, y_pred_numeric, class_names)
                     
@@ -1809,7 +1813,7 @@ with tab_export:
                 # Download do relatório
                 with open(html_path, "rb") as f:
                     st.download_button(
-                        "⬇️ Baixar Relatório HTML Completo",
+                        "💾 Baixar Relatório HTML Completo",
                         data=f.read(),
                         file_name="relatorio_completo_cogumelos.html",
                         mime="text/html",
@@ -1820,7 +1824,7 @@ with tab_export:
                 with open(html_path, "r", encoding="utf-8") as f:
                     html_content = f.read()
                 
-                st.markdown("### 👀 Prévia do Relatório")
+                st.markdown("### Prévia do Relatório")
                 st.components.v1.html(html_content, height=600, scrolling=True)
                 
             except Exception as e:
