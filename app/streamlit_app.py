@@ -904,39 +904,198 @@ with tab_evaluate:
         # Plots do modelo usando evaluate_model
         st.markdown("### 📈 Avaliação do Modelo (evaluate_model)")
         
-        # Lista completa de plots disponíveis com suas explicações
+        # Lista de plots, na ordem solicitada
         plots_requested = [
             ("Pipeline Plot", "pipeline", "pipeline"),
-            ("AUC", "auc", "auc_roc"),
-            ("Confusion Matrix", "confusion_matrix", "cm"),
-            ("Threshold", "threshold", "threshold"),
-            ("Precision Recall", "pr", "ap_pr"),
-            ("Prediction Error", "error", "error"),
-            ("Class Report", "class_report", "clf_report"),
             ("Feature Importance", "feature", "feat_importance"),
             ("Learning Curve", "learning", "learning_curve"),
-            ("Manifold Learning", "manifold", "manifold"),
-            ("Calibration Curve", "calibration", "calibration"),
             ("Validation Curve", "vc", "validation"),
+            ("AUC", "auc", "auc_roc"),
+            ("Threshold", "threshold", "threshold"),
+            ("Confusion Matrix", "confusion_matrix", "cm"),
+            ("Class Report", "class_report", "clf_report"),
+            ("Precision Recall", "pr", "ap_pr"),
+            ("Prediction Error", "error", "error"),
+            ("Calibration Curve", "calibration", "calibration"),
+            ("Manifold Learning", "manifold", "manifold"),
             ("Decision Tree", "tree", "tree"),
         ]
 
         # Exibir plots em uma única coluna
+        # Cache leve para evitar recomputar predições várias vezes em fallbacks
+        _fallback_preds = None
+        _fallback_y_true_numeric = None
+        _fallback_y_pred_numeric = None
+        _fallback_y_proba = None
         for label, plt_name, explanation_key in plots_requested:
             try:
                 st.markdown(f"#### {label}")
                 # Gera o plot do PyCaret e exibe diretamente
                 plot_model(st.session_state.trained_model, plot=plt_name, display_format='streamlit')
                 
-                # Adicionar explicação colapsada para cada plot
-                with st.expander(f"ℹ️ Como interpretar — {label}"):
-                    st.markdown(EXPLANATIONS_MD.get(explanation_key, "_(Explicação não disponível para este gráfico)_"))
-                
                 # Marca como plot gerado mas não salvo
                 st.session_state.training_plots[label] = None
                 
             except Exception as e:
                 st.warning(f"Plot '{label}' não pôde ser gerado: {e}")
+                # ===== FALLBACKS ESPECÍFICOS =====
+                try:
+                    # Pipeline Plot — fallback com Graphviz (DOT via st.graphviz_chart)
+                    if plt_name == "pipeline":
+                        dot_lines = [
+                            "digraph G {",
+                            "rankdir=LR;",
+                            "node [shape=box, style=filled, color=gray30, fillcolor=gray15, fontcolor=white];",
+                            "Dados [label=\"Dados\"];",
+                            "Pre [label=\"Pré-processamento\"];",
+                            "FS [label=\"Seleção de Features\"];",
+                            "Model [label=\"Modelo: Decision Tree\"];",
+                            f"CV [label=\"Validação (K-Fold={folds})\"];",
+                            "Dados -> Pre -> FS -> Model -> CV;",
+                            "}"
+                        ]
+                        st.graphviz_chart("\n".join(dot_lines))
+
+                    # Feature Importance — fallback com Plotly
+                    if plt_name == "feature":
+                        model = st.session_state.trained_model
+                        if hasattr(model, "feature_importances_"):
+                            try:
+                                feature_names = get_config("X_train_transformed").columns.tolist()
+                            except Exception:
+                                feature_names = [f"f{i}" for i in range(len(getattr(model, "feature_importances_", [])))]
+                            importances = getattr(model, "feature_importances_", None)
+                            if importances is not None and len(importances) == len(feature_names):
+                                importance_dict = dict(zip(feature_names, importances))
+                                fig = plot_feature_importance_advanced(importance_dict, top_n=20)
+                                st.plotly_chart(fig, use_container_width=True)
+                        st.info("Importâncias de features indisponíveis para este modelo.")
+
+                    # Calibration Curve — fallback com nossa função
+                    if plt_name == "calibration":
+                        try:
+                            if _fallback_preds is None:
+                                if st.session_state.training_data is None:
+                                    st.info("Dados de treino indisponíveis para gerar calibração.")
+                                else:
+                                    df_train = st.session_state.training_data.copy()
+                                    _fallback_preds = predict_model(st.session_state.trained_model, data=df_train)
+                                    from sklearn.preprocessing import LabelEncoder as _LE
+                                    _le = _LE()
+                                    _fallback_y_true_numeric = _le.fit_transform(df_train[target_col])
+                                    _fallback_y_pred_numeric = _le.transform(_fallback_preds['prediction_label'])
+                                    _fallback_y_proba = _fallback_preds['prediction_score']
+                            if _fallback_y_true_numeric is not None and _fallback_y_proba is not None:
+                                fig = plot_calibration_curve_advanced(_fallback_y_true_numeric, _fallback_y_proba)
+                                st.plotly_chart(fig, use_container_width=True)
+                        except Exception as _e_cal:
+                            st.info(f"Fallback de calibração também falhou: {_e_cal}")
+
+                    # Decision Tree — fallback com matplotlib.plot_tree
+                    if plt_name == "tree":
+                        try:
+                            import matplotlib.pyplot as _plt
+                            from sklearn import tree as _sk_tree
+                            model = st.session_state.trained_model
+                            # Tentar obter nomes das features
+                            try:
+                                feature_names = get_config("X_train_transformed").columns.tolist()
+                            except Exception:
+                                feature_names = None
+                            # Nomes de classes
+                            if st.session_state.training_data is not None and target_col in st.session_state.training_data.columns:
+                                classes = sorted(st.session_state.training_data[target_col].unique().tolist())
+                            else:
+                                classes = None
+                            fig = _plt.figure(figsize=(14, 8))
+                            _sk_tree.plot_tree(
+                                model,
+                                feature_names=feature_names,
+                                class_names=classes,
+                                filled=True,
+                                rounded=True,
+                                fontsize=8
+                            )
+                            _plt.tight_layout()
+                            st.pyplot(fig, clear_figure=True)
+                        except Exception as _e_tree:
+                            st.info(f"Fallback de Decision Tree também falhou: {_e_tree}")
+
+                except Exception as _e_fb:
+                    st.info(f"Fallback não disponível para '{label}': {_e_fb}")
+            
+            # ===== RENDERIZAÇÃO ADICIONAL: garantir exibição dos 4 solicitados =====
+            try:
+                if plt_name == "pipeline":
+                    dot_lines = [
+                        "digraph G {",
+                        "rankdir=LR;",
+                        "node [shape=box, style=filled, color=gray30, fillcolor=gray15, fontcolor=white];",
+                        "Dados [label=\"Dados\"];",
+                        "Pre [label=\"Pré-processamento\"];",
+                        "FS [label=\"Seleção de Features\"];",
+                        "Model [label=\"Modelo: Decision Tree\"];",
+                        f"CV [label=\"Validação (K-Fold={folds})\"];",
+                        "Dados -> Pre -> FS -> Model -> CV;",
+                        "}"
+                    ]
+                    st.graphviz_chart("\n".join(dot_lines))
+                elif plt_name == "feature":
+                    model = st.session_state.trained_model
+                    if hasattr(model, "feature_importances_"):
+                        try:
+                            feature_names = get_config("X_train_transformed").columns.tolist()
+                        except Exception:
+                            feature_names = [f"f{i}" for i in range(len(getattr(model, "feature_importances_", [])))]
+                        importances = getattr(model, "feature_importances_", None)
+                        if importances is not None and len(importances) == len(feature_names):
+                            importance_dict = dict(zip(feature_names, importances))
+                            fig = plot_feature_importance_advanced(importance_dict, top_n=20)
+                            st.plotly_chart(fig, use_container_width=True)
+                elif plt_name == "calibration":
+                    if _fallback_preds is None and st.session_state.training_data is not None:
+                        df_train = st.session_state.training_data.copy()
+                        _fallback_preds = predict_model(st.session_state.trained_model, data=df_train)
+                        from sklearn.preprocessing import LabelEncoder as _LE
+                        _le = _LE()
+                        _fallback_y_true_numeric = _le.fit_transform(df_train[target_col])
+                        _fallback_y_pred_numeric = _le.transform(_fallback_preds['prediction_label'])
+                        _fallback_y_proba = _fallback_preds['prediction_score']
+                    if _fallback_y_true_numeric is not None and _fallback_y_proba is not None:
+                        fig = plot_calibration_curve_advanced(_fallback_y_true_numeric, _fallback_y_proba)
+                        st.plotly_chart(fig, use_container_width=True)
+                elif plt_name == "tree":
+                    try:
+                        import matplotlib.pyplot as _plt
+                        from sklearn import tree as _sk_tree
+                        model = st.session_state.trained_model
+                        try:
+                            feature_names = get_config("X_train_transformed").columns.tolist()
+                        except Exception:
+                            feature_names = None
+                        if st.session_state.training_data is not None and target_col in st.session_state.training_data.columns:
+                            classes = sorted(st.session_state.training_data[target_col].unique().tolist())
+                        else:
+                            classes = None
+                        fig = _plt.figure(figsize=(14, 8))
+                        _sk_tree.plot_tree(
+                            model,
+                            feature_names=feature_names,
+                            class_names=classes,
+                            filled=True,
+                            rounded=True,
+                            fontsize=8
+                        )
+                        _plt.tight_layout()
+                        st.pyplot(fig, clear_figure=True)
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+
+            # Explicação sempre após o(s) gráfico(s)
+            with st.expander(f"ℹ️ Como interpretar — {label}"):
+                st.markdown(EXPLANATIONS_MD.get(explanation_key, "_(Explicação não disponível para este gráfico)_"))
             
     else:
         st.warning("⚠️ Nenhum modelo treinado disponível!")
